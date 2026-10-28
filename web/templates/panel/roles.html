@@ -1,0 +1,140 @@
+{% extends 'panel/base.html' %}
+
+{% block title %}Roles - Control de Flota{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h2 class="fw-bold">
+            <i class="fas fa-user-tag me-2 text-primary"></i>Gestión de Roles
+        </h2>
+        <p class="text-muted">Administrar roles y permisos del sistema</p>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Formulario de creación de rol -->
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-plus-circle me-2 text-primary"></i>Nuevo Rol
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{% url 'panel:roles' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="create">
+                    
+                    <div class="mb-3">
+                        <label for="nombre" class="form-label">Nombre del rol</label>
+                        <input type="text" class="form-control" id="nombre" name="nombre" 
+                               placeholder="Ej: ADMINISTRADOR" required>
+                        <small class="text-muted">En mayúsculas</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="descripcion" class="form-label">Descripción</label>
+                        <textarea class="form-control" id="descripcion" name="descripcion" 
+                                  rows="3" placeholder="Descripción del rol..."></textarea>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-save me-1"></i>Crear Rol
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lista de roles -->
+    <div class="col-md-8">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-list me-2 text-primary"></i>Roles del Sistema
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    {% for rol in roles %}
+                    <div class="col-md-6">
+                        <div class="card border h-100">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div class="role-icon bg-primary bg-opacity-10 text-primary p-2 rounded">
+                                        <i class="fas fa-user-shield"></i>
+                                    </div>
+                                    <span class="badge bg-primary">ID: {{ rol.id_rol }}</span>
+                                </div>
+                                <h6 class="fw-bold">{{ rol.nombre }}</h6>
+                                <p class="text-muted small mb-0">{{ rol.descripcion|default:"Sin descripción" }}</p>
+                            </div>
+                            <div class="card-footer bg-white border-top">
+                                <button class="btn btn-sm btn-outline-primary w-100">
+                                    <i class="fas fa-edit me-1"></i>Editar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="col-12">
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>No hay roles registrados
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <hr class="my-4">
+
+                <h6 class="fw-bold mb-3">Tabla de Roles</h6>
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>ID</th>
+                                <th>Nombre</th>
+                                <th>Descripción</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for rol in roles %}
+                            <tr>
+                                <td>{{ rol.id_rol }}</td>
+                                <td><strong>{{ rol.nombre }}</strong></td>
+                                <td>{{ rol.descripcion|default:"-" }}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary" title="Editar">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <form method="POST" action="{% url 'panel:roles' %}" 
+                                          style="display: inline;"
+                                          onsubmit="return confirm('¿Está seguro de eliminar este rol?');">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="delete">
+                                        <input type="hidden" name="id_rol" value="{{ rol.id_rol }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="4" class="text-center text-muted py-4">
+                                    No hay roles registrados
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+{% endblock %}

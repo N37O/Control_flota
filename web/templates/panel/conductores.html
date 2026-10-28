@@ -1,0 +1,538 @@
+{% extends 'panel/base.html' %}
+{% block title %}Conductores - Catálogos{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h2 class="fw-bold">
+            <i class="fas fa-id-card me-2 text-primary"></i>Catálogo de Conductores
+        </h2>
+        <p class="text-muted">Gestionar conductores del sistema</p>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="{% if is_admin %}col-lg-5{% else %}col-lg-4{% endif %} conductor-column" style="display:flex; flex-direction:column; gap:1rem;">
+        {% if is_admin %}
+        <div class="card modern-form-card border-0 shadow-sm" id="formPanel" style="display:none; order:2;">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-bold" id="formTitle">
+                    <i class="fas fa-user-plus me-1 text-primary"></i>Registrar Nuevo Conductor
+                </h6>
+                <button type="button" class="btn btn-sm btn-outline-secondary" style="display:none;" id="btnCancel">
+                    <i class="fas fa-times me-1"></i>Cancelar
+                </button>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="" enctype="multipart/form-data" id="conductorForm" novalidate>
+                    {% csrf_token %}
+                    <input type="hidden" name="action" id="formAction" value="create">
+                    <input type="hidden" name="id_conductor" id="formId">
+
+                    <div class="field-group">
+                        <label for="f_nombre" class="form-label small fw-bold">Nombre Completo <span class="text-danger">*</span></label>
+                        <input type="text" name="nombre" id="f_nombre" class="form-control form-control-sm" placeholder="Ej. María López" title="Ingrese solo letras, espacios, guiones o apóstrofes" maxlength="100" minlength="3" autocomplete="name" required>
+                        <div class="invalid-feedback">El nombre es obligatorio y debe tener al menos 3 caracteres.</div>
+                    </div>
+
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <div class="field-group">
+                                <label for="f_dui" class="form-label small fw-bold">DUI</label>
+                                <input type="text" name="dui" id="f_dui" class="form-control form-control-sm sv-id-number" placeholder="Ej. 01234567-8" title="Formato salvadoreño: 8 dígitos, guion y 1 dígito" maxlength="10" pattern="[0-9]{8}-[0-9]" inputmode="numeric" autocomplete="off" aria-describedby="duiHelp">
+                                <div id="duiHelp" class="form-text">Formato: 00000000-0</div>
+                                <div class="invalid-feedback" id="duiFeedback">Escribe 8 dígitos, guion y 1 dígito (ejemplo: 01234567-8).</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="field-group">
+                                <label for="f_telefono" class="form-label small fw-bold">Teléfono</label>
+                                <input type="text" name="telefono" id="f_telefono" class="form-control form-control-sm" placeholder="Ej. 71234567" title="Ingrese solo números (8 o 9 dígitos)" maxlength="9" pattern="[0-9]{8,9}" inputmode="numeric" autocomplete="tel">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="field-group">
+                        <label for="f_licencia" class="form-label small fw-bold">
+                            <i class="fas fa-id-card me-1"></i>Número de Licencia
+                        </label>
+                        <input type="text" name="licencia" id="f_licencia" class="form-control form-control-sm sv-id-number" placeholder="Ej. 01234567-8" title="Formato: 8 dígitos, guion y 1 dígito" maxlength="10" pattern="[0-9]{8}-[0-9]" inputmode="numeric" autocomplete="off" aria-describedby="licenciaNumeroHelp">
+                        <div id="licenciaNumeroHelp" class="form-text">Formato: 00000000-0</div>
+                        <div class="invalid-feedback" id="licenciaFeedback">Escribe 8 dígitos, guion y 1 dígito.</div>
+                    </div>
+
+                    <input type="hidden" name="tipo_licencia" id="f_tipo" value="Pesado">
+
+                    <div class="field-group photo-upload-group">
+                        <label for="f_licencia_imagen" class="form-label small fw-bold">
+                            <i class="fas fa-camera me-1"></i>Foto de la Licencia
+                        </label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text"><i class="fas fa-upload"></i></span>
+                            <input type="file" name="licencia_imagen" id="f_licencia_imagen" class="form-control" accept="image/jpeg, image/png" aria-describedby="licenciaHelp">
+                        </div>
+                        <div id="licenciaHelp" class="form-text">Sube una foto clara en JPG o PNG, con un máximo de 5MB.</div>
+
+                        <div id="imagenActualContainer" class="preview-box mt-3" style="display:none;">
+                            <small class="text-primary fw-bold"><i class="fas fa-image me-1"></i>Imagen actual</small>
+                            <div class="preview-card">
+                                <img id="imagenActualPreview" src="" alt="Licencia actual" class="img-fluid">
+                            </div>
+                        </div>
+
+                        <div id="imagenNuevaContainer" class="preview-box mt-3" style="display:none;">
+                            <small class="text-success fw-bold"><i class="fas fa-check-circle me-1"></i>Nueva imagen seleccionada</small>
+                            <div class="preview-card">
+                                <img id="imagenNuevaPreview" src="" alt="Nueva licencia" class="img-fluid">
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-success btn-sm w-100 mt-2 modern-submit" id="btnSubmit">
+                        <i class="fas fa-save me-1"></i>Guardar Conductor
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="card conductor-profile-card border-0 shadow-sm" id="conductorCard" style="order:1;">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-bold">
+                    <i class="fas fa-id-card me-1 text-primary"></i>Información del conductor
+                </h6>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge conductor-meta-badge" id="cardEstadoBadge">Sin seleccionar</span>
+                    {% if is_admin %}
+                    <button type="button" class="btn btn-sm btn-success" id="btnShowForm">
+                        <i class="fas fa-plus me-1"></i>Registrar
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="card-body text-center">
+                <div class="photo-frame mx-auto mb-3" style="width:250px; height:200px; min-width:64px; aspect-ratio:1;">
+                    <img id="cardConductorImage" src="https://placehold.co/300x260/edf1e7/365b2a?text=Sin+Foto" alt="Foto conductor" class="conductor-photo" style="display:block; width:100%; height:100%; max-width:none; object-fit:cover; object-position:center;">
+                </div>
+
+                <h5 class="mb-1" id="cardConductorNombre">Selecciona un conductor</h5>
+                <p class="text-muted mb-3" id="cardConductorTipo">Sin información</p>
+
+                <div class="card-detail-list text-start">
+                    <div class="detail-item">
+                        <span class="detail-label"><i class="fas fa-address-card me-2"></i>DUI</span>
+                        <span class="detail-value" id="cardConductorDui">-</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label"><i class="fas fa-id-card me-2"></i>Licencia</span>
+                        <span class="detail-value" id="cardConductorLicencia">-</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label"><i class="fas fa-phone me-2"></i>Teléfono</span>
+                        <span class="detail-value" id="cardConductorTelefono">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="{% if is_admin %}col-lg-7{% else %}col-lg-8{% endif %}">
+        <div class="card conductor-directory-card border-0 shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="mb-1 fw-bold">
+                        <i class="fas fa-users me-2 text-primary"></i>Buscar conductores
+                    </h6>
+                </div>
+                <span class="badge conductor-meta-badge">{{ conductores|length }} en total</span>
+            </div>
+            <div class="card-body">
+                <label for="conductorSearch" class="form-label small fw-semibold">Nombre, DUI, licencia o teléfono</label>
+                <div class="input-group conductor-search mb-3">
+                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                    <input type="search" id="conductorSearch" class="form-control" placeholder="Escribe para buscar..." autocomplete="off" aria-describedby="searchHelp">
+                    <button type="button" class="btn btn-outline-secondary" id="btnClearSearch" title="Limpiar búsqueda" aria-label="Limpiar búsqueda">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="directory-toolbar">
+                    <small id="searchHelp" class="text-muted">Los resultados aparecen al escribir.</small>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="btnShowAll">
+                        <i class="fas fa-list me-1"></i>Ver todos
+                    </button>
+                </div>
+
+                <div class="directory-empty-state" id="directoryPrompt">
+                    <span class="directory-empty-icon"><i class="fas fa-search"></i></span>
+                    <strong>Encuentra un conductor</strong>
+                    <span>Escribe un dato para buscar o selecciona “Ver todos”.</span>
+                </div>
+                <div class="directory-empty-state" id="noSearchResults" style="display:none;">
+                    <span class="directory-empty-icon"><i class="fas fa-user-slash"></i></span>
+                    <strong>No encontramos coincidencias</strong>
+                    <span>Prueba con otro nombre, DUI, licencia o teléfono.</span>
+                </div>
+
+                <div class="directory-results-heading" id="resultsHeading" style="display:none;">
+                    <span>Resultados</span>
+                    <span class="badge conductor-meta-badge" id="resultCount">0</span>
+                </div>
+                <div class="table-responsive" id="conductorResults" style="display:none;">
+                    <table class="table table-hover table-sm align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Nombre</th>
+                                <th>DUI</th>
+                                <th>Licencia</th>
+                                <th>Teléfono</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for c in conductores %}
+                            <tr class="{% if not c.activo %}table-secondary text-muted{% endif %} conductor-row d-none"
+                                data-id="{{ c.id_conductor }}"
+                                data-nombre="{{ c.nombre }}"
+                                data-dui="{{ c.dui|default:'' }}"
+                                data-licencia="{{ c.licencia|default:'' }}"
+                                data-licencia-imagen="{{ c.licencia_imagen_url|default:'' }}"
+                                data-tipo="{{ c.tipo_licencia|default:'' }}"
+                                data-telefono="{{ c.telefono|default:'' }}"
+                                data-activo="{% if c.activo %}Activo{% else %}Inactivo{% endif %}">
+                                <td><strong>{{ c.nombre }}</strong></td>
+                                <td>{{ c.dui|default:"-" }}</td>
+                                <td>{{ c.licencia|default:"-" }} ({{ c.tipo_licencia|default:"N/A" }})</td>
+                                <td>{{ c.telefono|default:"-" }}</td>
+                                <td>
+                                    {% if c.activo %}
+                                        <span class="badge bg-success">Activo</span>
+                                    {% else %}
+                                        <span class="badge bg-warning text-dark">Inactivo</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if is_admin %}
+                                        <button type="button" class="btn btn-sm btn-info text-white btn-editar" title="Editar">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+
+                                        <form method="POST" style="display:inline;">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="action" value="toggle_activo">
+                                            <input type="hidden" name="id_conductor" value="{{ c.id_conductor }}">
+                                            <input type="hidden" name="nuevo_estado" value="{% if c.activo %}false{% else %}true{% endif %}">
+                                            <button type="submit"
+                                                    class="btn btn-sm {% if c.activo %}btn-warning{% else %}btn-success{% endif %}"
+                                                    title="{% if c.activo %}Desactivar{% else %}Activar{% endif %}"
+                                                    onclick="return confirm('¿Cambiar estado de activación de este conductor?');">
+                                                <i class="fas {% if c.activo %}fa-ban{% else %}fa-check{% endif %}"></i>
+                                            </button>
+                                        </form>
+                                    {% else %}
+                                        <span class="text-muted small">Sin permisos</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var form = document.getElementById('conductorForm');
+
+    function updateConductorCard(row) {
+        if (!row) return;
+
+        var nombre = row.getAttribute('data-nombre') || 'Sin nombre';
+        var dui = row.getAttribute('data-dui') || '-';
+        var licencia = row.getAttribute('data-licencia') || '-';
+        var tipo = row.getAttribute('data-tipo') || 'Sin tipo';
+        var telefono = row.getAttribute('data-telefono') || '-';
+        var imagen = row.getAttribute('data-licencia-imagen') || 'https://placehold.co/300x260/edf1e7/365b2a?text=Sin+Foto';
+        var estado = row.getAttribute('data-activo') || 'Inactivo';
+
+        document.getElementById('cardConductorNombre').textContent = nombre;
+        document.getElementById('cardConductorTipo').textContent = tipo;
+        document.getElementById('cardConductorDui').textContent = dui;
+        document.getElementById('cardConductorLicencia').textContent = licencia;
+        document.getElementById('cardConductorTelefono').textContent = telefono;
+        document.getElementById('cardConductorImage').src = imagen;
+        document.getElementById('cardEstadoBadge').textContent = estado;
+        document.getElementById('cardEstadoBadge').className = 'badge ' + (estado === 'Activo' ? 'bg-success' : 'bg-warning text-dark');
+    }
+
+    document.querySelectorAll('.conductor-row').forEach(function(row) {
+        row.addEventListener('click', function() {
+            updateConductorCard(this);
+            document.querySelectorAll('.conductor-row').forEach(function(item) {
+                item.classList.remove('selected-conductor');
+            });
+            this.classList.add('selected-conductor');
+        });
+    });
+
+    function normalizeSearch(value) {
+        return (value || '').toLocaleLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    }
+
+    var searchInput = document.getElementById('conductorSearch');
+    var resultsPanel = document.getElementById('conductorResults');
+    var directoryPrompt = document.getElementById('directoryPrompt');
+    var noResults = document.getElementById('noSearchResults');
+    var resultsHeading = document.getElementById('resultsHeading');
+    var resultCount = document.getElementById('resultCount');
+    var showAllButton = document.getElementById('btnShowAll');
+    var showAll = false;
+
+    function searchConductores(showEveryConductor) {
+        if (!searchInput || !resultsPanel) return;
+
+        var query = normalizeSearch(searchInput.value.trim());
+        var shouldShowResults = showEveryConductor || query.length > 0;
+        var visibleCount = 0;
+
+        document.querySelectorAll('.conductor-row').forEach(function(row) {
+            var searchable = [
+                row.getAttribute('data-nombre'),
+                row.getAttribute('data-dui'),
+                row.getAttribute('data-licencia'),
+                row.getAttribute('data-telefono')
+            ].join(' ');
+            searchable = normalizeSearch(searchable);
+            var matches = shouldShowResults && (showEveryConductor || searchable.indexOf(query) !== -1);
+
+            row.classList.toggle('d-none', !matches);
+            if (matches) visibleCount += 1;
+        });
+
+        resultsPanel.style.display = shouldShowResults && visibleCount ? 'block' : 'none';
+        resultsHeading.style.display = shouldShowResults && visibleCount ? 'flex' : 'none';
+        directoryPrompt.style.display = shouldShowResults ? 'none' : 'flex';
+        noResults.style.display = shouldShowResults && visibleCount === 0 ? 'flex' : 'none';
+        resultCount.textContent = visibleCount;
+    }
+
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            showAll = false;
+            showAllButton.innerHTML = '<i class="fas fa-list me-1"></i>Ver todos';
+            searchConductores(false);
+        });
+    }
+
+    if (showAllButton) {
+        showAllButton.addEventListener('click', function() {
+            showAll = !showAll;
+            if (showAll) {
+                searchInput.value = '';
+                this.innerHTML = '<i class="fas fa-eye-slash me-1"></i>Ocultar todos';
+            } else {
+                this.innerHTML = '<i class="fas fa-list me-1"></i>Ver todos';
+            }
+            searchConductores(showAll);
+        });
+    }
+
+    var clearSearchButton = document.getElementById('btnClearSearch');
+    if (clearSearchButton) {
+        clearSearchButton.addEventListener('click', function() {
+            searchInput.value = '';
+            showAll = false;
+            showAllButton.innerHTML = '<i class="fas fa-list me-1"></i>Ver todos';
+            searchConductores(false);
+            searchInput.focus();
+        });
+    }
+
+    function validateField(input) {
+        if (!input) return;
+        var valid = input.checkValidity();
+        input.classList.toggle('is-invalid', !valid && input.value.trim() !== '');
+        input.classList.toggle('is-valid', valid && input.value.trim() !== '');
+        return valid;
+    }
+
+    document.querySelectorAll('.sv-id-number').forEach(function(input) {
+        input.addEventListener('input', function() {
+            var digits = this.value.replace(/\D/g, '').slice(0, 9);
+            this.value = digits.length > 8 ? digits.slice(0, 8) + '-' + digits.slice(8) : digits;
+
+            var valid = this.value === '' || /^[0-9]{8}-[0-9]$/.test(this.value);
+            this.classList.toggle('is-invalid', !valid);
+            this.classList.toggle('is-valid', valid && this.value !== '');
+            validateUniqueNumber(this);
+        });
+    });
+
+    function validateUniqueNumber(input) {
+        var value = input.value.trim();
+        var feedback = document.getElementById(input.name === 'dui' ? 'duiFeedback' : 'licenciaFeedback');
+        var originalMessage = input.name === 'dui'
+            ? 'Escribe 8 dígitos, guion y 1 dígito (ejemplo: 01234567-8).'
+            : 'Escribe 8 dígitos, guion y 1 dígito.';
+
+        if (!value || !/^[0-9]{8}-[0-9]$/.test(value)) {
+            feedback.textContent = originalMessage;
+            return !value || input.checkValidity();
+        }
+
+        var currentId = document.getElementById('formId').value;
+        var duplicate = Array.from(document.querySelectorAll('.conductor-row')).some(function(row) {
+            return row.getAttribute('data-id') !== currentId && row.getAttribute('data-' + input.name) === value;
+        });
+
+        feedback.textContent = duplicate
+            ? (input.name === 'dui' ? 'Este DUI ya está registrado con otro conductor.' : 'Esta licencia ya está registrada con otro conductor.')
+            : originalMessage;
+        input.classList.toggle('is-invalid', duplicate);
+        input.classList.toggle('is-valid', !duplicate && value !== '');
+        return !duplicate;
+    }
+
+    var nombreInput = document.getElementById('f_nombre');
+    if (nombreInput) {
+        nombreInput.addEventListener('input', function() {
+            validateField(this);
+        });
+    }
+
+    var fileInput = document.getElementById('f_licencia_imagen');
+    if (fileInput) {
+        fileInput.addEventListener('change', function() {
+            var preview = document.getElementById('imagenNuevaPreview');
+            var container = document.getElementById('imagenNuevaContainer');
+            if (this.files && this.files[0]) {
+                var file = this.files[0];
+                var fileType = file.type || '';
+                var validImage = fileType.startsWith('image/') && (fileType === 'image/jpeg' || fileType === 'image/png' || fileType === 'image/jpg');
+                if (file.size > 5 * 1024 * 1024 || !validImage) {
+                    this.value = '';
+                    preview.src = '';
+                    container.style.display = 'none';
+                    this.classList.add('is-invalid');
+                    alert('La imagen debe ser JPG o PNG y no superar 5 MB.');
+                    return;
+                }
+                this.classList.remove('is-invalid');
+                this.classList.add('is-valid');
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    preview.src = e.target.result;
+                    container.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    }
+
+    document.querySelectorAll('.btn-editar').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var row = this.closest('tr');
+            updateConductorCard(row);
+            document.getElementById('formAction').value = 'update';
+            document.getElementById('formId').value = row.getAttribute('data-id');
+            document.getElementById('f_nombre').value = row.getAttribute('data-nombre') || '';
+            document.getElementById('f_dui').value = row.getAttribute('data-dui') || '';
+            document.getElementById('f_licencia').value = row.getAttribute('data-licencia') || '';
+            document.getElementById('f_tipo').value = row.getAttribute('data-tipo') || 'Pesado';
+            document.getElementById('f_telefono').value = row.getAttribute('data-telefono') || '';
+
+            var img = row.getAttribute('data-licencia-imagen');
+            if (img && img !== 'None' && img !== '') {
+                document.getElementById('imagenActualPreview').src = img;
+                document.getElementById('imagenActualContainer').style.display = 'block';
+            } else {
+                document.getElementById('imagenActualContainer').style.display = 'none';
+            }
+            document.getElementById('btnCancel').style.display = 'block';
+            document.getElementById('btnShowForm').style.display = 'none';
+            document.getElementById('formPanel').style.display = 'block';
+            document.getElementById('formTitle').innerHTML = '<i class="fas fa-edit me-1 text-success"></i>Editar Conductor';
+            form.scrollIntoView({ behavior: 'smooth' });
+        });
+    });
+
+    var btnShowForm = document.getElementById('btnShowForm');
+    if (btnShowForm) {
+        btnShowForm.addEventListener('click', function() {
+            form.reset();
+            document.getElementById('formAction').value = 'create';
+            document.getElementById('formId').value = '';
+            document.getElementById('btnCancel').style.display = 'block';
+            document.getElementById('formPanel').style.display = 'block';
+            this.style.display = 'none';
+            document.getElementById('formTitle').innerHTML = '<i class="fas fa-user-plus me-1 text-primary"></i>Registrar Nuevo Conductor';
+            document.getElementById('imagenActualContainer').style.display = 'none';
+            document.getElementById('imagenNuevaContainer').style.display = 'none';
+            form.scrollIntoView({ behavior: 'smooth' });
+        });
+    }
+
+    var btnCancel = document.getElementById('btnCancel');
+    if (btnCancel) {
+        btnCancel.addEventListener('click', function() {
+            form.reset();
+            document.getElementById('formAction').value = 'create';
+            document.getElementById('formId').value = '';
+            document.getElementById('formPanel').style.display = 'none';
+            document.getElementById('btnShowForm').style.display = 'inline-block';
+            btnCancel.style.display = 'none';
+            document.getElementById('formTitle').innerHTML = '<i class="fas fa-user-plus me-1 text-primary"></i>Registrar Nuevo Conductor';
+            document.getElementById('imagenActualContainer').style.display = 'none';
+            document.getElementById('imagenNuevaContainer').style.display = 'none';
+        });
+    }
+
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            var nombre = document.getElementById('f_nombre');
+            var validNombre = nombre && nombre.value.trim().length >= 3;
+
+            if (!validNombre) {
+                e.preventDefault();
+                nombre.classList.add('is-invalid');
+                alert('El nombre es obligatorio y debe tener al menos 3 caracteres.');
+                return false;
+            }
+
+            var invalidId = Array.from(document.querySelectorAll('.sv-id-number')).find(function(input) {
+                return input.value !== '' && !/^[0-9]{8}-[0-9]$/.test(input.value);
+            });
+            if (invalidId) {
+                e.preventDefault();
+                invalidId.classList.add('is-invalid');
+                invalidId.focus();
+                return false;
+            }
+
+            var duplicateId = Array.from(document.querySelectorAll('.sv-id-number')).find(function(input) {
+                return !validateUniqueNumber(input);
+            });
+            if (duplicateId) {
+                e.preventDefault();
+                duplicateId.focus();
+                return false;
+            }
+
+            var file = document.getElementById('f_licencia_imagen');
+            if (file && file.files && file.files[0]) {
+                var selected = file.files[0];
+                if (selected.size > 5 * 1024 * 1024 || !selected.type.startsWith('image/')) {
+                    e.preventDefault();
+                    file.classList.add('is-invalid');
+                    alert('La imagen debe ser JPG o PNG y no superar 5 MB.');
+                    return false;
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

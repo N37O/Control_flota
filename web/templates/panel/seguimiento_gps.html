@@ -1,0 +1,480 @@
+{% extends 'panel/base.html' %}
+{% block title %}Seguimiento GPS - Control de Flota{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<style>
+    #trackingMap {
+        height: 550px;
+        width: 100%;
+        min-height: 400px;
+        z-index: 1;
+        background-color: #f5f5f5;
+    }
+    
+    .tracking-map-card .card-body {
+        padding: 0;
+    }
+    
+    .tracking-map-card {
+        min-height: 550px;
+    }
+
+    .tracking-count-badge {
+        background-color: #eaf3fb !important;
+        border: 1px solid #d5e8f7;
+        color: #1479cf !important;
+    }
+    
+    .sim-controls {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        padding: 1rem;
+        margin-top: 1rem;
+    }
+    
+    .sim-badge {
+        animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.6; }
+    }
+</style>
+{% endblock %}
+{% block content %}
+<div class="row mb-4 align-items-end">
+    <div class="col-md-8">
+        <h2 class="fw-bold mb-1"><i class="fas fa-map-marked-alt me-2 text-primary"></i>Seguimiento GPS</h2>
+        <p class="text-muted mb-0">Rutas, ubicaciones recibidas y hora estimada de llegada</p>
+    </div>
+    <div class="col-md-4 text-md-end mt-3 mt-md-0">
+        <span class="badge tracking-count-badge">{{ tracking_data.viajes|length }} viajes disponibles</span>
+        <span class="badge tracking-count-badge">{{ tracking_data.posiciones|length }} posiciones recientes</span>
+    </div>
+</div>
+<div class="row g-4 align-items-stretch">
+    <div class="col-xl-8">
+        <section class="card tracking-map-card h-100">
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <div>
+                    <h5 class="mb-1 fw-bold"><i class="fas fa-route me-2 text-primary"></i>Mapa de ruta</h5>
+                    <small class="text-muted" id="mapCaption">Selecciona un viaje para ver la ruta.</small>
+                </div>
+                <div class="tracking-controls d-flex gap-2 flex-wrap">
+                    <label class="visually-hidden" for="tripSelector">Seleccionar viaje</label>
+                    <select id="tripSelector" class="form-select form-select-sm" aria-label="Seleccionar viaje" style="min-width: 250px;">
+                        <option value="">Seleccionar viaje...</option>
+                    </select>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="refreshTracking" title="Actualizar datos" aria-label="Actualizar datos">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-warning" id="btnSimulate" title="Iniciar modo simulación GPS">
+                        <i class="fas fa-play"></i> Simular
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div id="trackingMap" class="tracking-map" role="img" aria-label="Mapa de ruta del viaje"></div>
+            </div>
+            <div class="card-footer bg-white d-flex flex-wrap justify-content-between gap-2">
+                <small class="text-muted"><i class="fas fa-map me-1"></i>Mapa base © Esri · Datos © OpenStreetMap</small>
+                <small class="text-muted" id="routeSource">La ruta se calcula al seleccionar un viaje.</small>
+                <small class="text-warning fw-bold sim-badge" id="simBadge" style="display:none;">
+                    <i class="fas fa-exclamation-triangle"></i> MODO SIMULACIÓN (Datos no reales)
+                </small>
+            </div>
+        </section>
+    </div>
+    <div class="col-xl-4">
+        <section class="card tracking-details-card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-bold"><i class="fas fa-truck me-2 text-primary"></i>Detalle del viaje</h5>
+                <span class="badge bg-secondary" id="gpsStatus">Sin seleccionar</span>
+            </div>
+            <div class="card-body">
+                <div class="tracking-trip-heading">
+                    <span class="tracking-eyebrow">VIAJE</span>
+                    <h4 class="mb-1" id="tripCode">Selecciona un viaje</h4>
+                    <div class="text-muted" id="tripState">Sin datos de seguimiento</div>
+                </div>
+                <dl class="tracking-facts">
+                    <div><dt>Unidad</dt><dd id="tripUnit">-</dd></div>
+                    <div><dt>Conductor</dt><dd id="tripDriver">-</dd></div>
+                    <div><dt>Ruta</dt><dd id="tripRoute">-</dd></div>
+                    <div><dt>Distancia</dt><dd id="tripDistance">-</dd></div>
+                    <div><dt>Última posición</dt><dd id="lastPosition">Sin señal GPS</dd></div>
+                    <div><dt>Velocidad</dt><dd id="tripSpeed">-</dd></div>
+                    <div class="tracking-eta"><dt>ETA estimada</dt><dd id="tripEta">-</dd></div>
+                </dl>
+                <a id="googleMapsLink" class="btn btn-primary w-100 disabled" href="#" target="_blank" rel="noopener noreferrer" aria-disabled="true">
+                    <i class="fas fa-map-marked-alt me-2"></i>Abrir indicaciones en Google Maps
+                </a>
+                <div id="simControls" class="sim-controls" style="display:none;">
+                    <h6 class="small text-primary mb-2"><i class="fas fa-tachometer-alt"></i> Controles de Simulación</h6>
+                    <div class="btn-group w-100 mb-2">
+                        <button type="button" class="btn btn-sm btn-success" id="btnStart"><i class="fas fa-play"></i> Iniciar</button>
+                        <button type="button" class="btn btn-sm btn-warning" id="btnPause" disabled><i class="fas fa-pause"></i> Pausar</button>
+                        <button type="button" class="btn btn-sm btn-danger" id="btnReset"><i class="fas fa-redo"></i> Reiniciar</button>
+                    </div>
+                    <div class="progress" style="height: 5px;">
+                        <div class="progress-bar bg-primary" id="simProgress" role="progressbar" style="width: 0%"></div>
+                    </div>
+                    <small class="text-muted mt-1 d-block" id="simStatus">Listo para iniciar</small>
+                </div>
+                <p class="small text-muted mt-2 mb-0" id="trackingNote">Las posiciones aparecen cuando el dispositivo GPS las envía al sistema.</p>
+                <p class="small text-warning mt-1 mb-0" id="simulationNote" style="display:none;">
+                    <i class="fas fa-info-circle"></i> <strong>Modo demostración:</strong> Las posiciones son simuladas y no se guardan en la base de datos.
+                </p>
+            </div>
+        </section>
+    </div>
+</div>
+{{ tracking_data|json_script:"tracking-data" }}
+{% endblock %}
+{% block extra_js %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var trackingData = JSON.parse(document.getElementById('tracking-data').textContent);
+    var trips = trackingData.viajes || [];
+    var positions = trackingData.posiciones || [];
+    var routingApiUrl = '{{ routing_api_url|escapejs }}'.replace(/\/$/, '');
+    var selector = document.getElementById('tripSelector');
+    
+    var map = L.map('trackingMap').setView([13.7942, -88.8965], 8);
+    
+    // ✅ Esri World Street Map - Gratuito, sin API key, confiable
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+        attribution: '&copy; Esri · Datos © OpenStreetMap contributors',
+        maxZoom: 19
+    }).addTo(map);
+    
+    setTimeout(function() {
+        map.invalidateSize();
+    }, 100);
+    
+    var layers = L.layerGroup().addTo(map);
+    var routeSource = document.getElementById('routeSource');
+    var statusBadge = document.getElementById('gpsStatus');
+    var mapsLink = document.getElementById('googleMapsLink');
+    
+    trips.forEach(function(trip) {
+        var option = document.createElement('option');
+        option.value = String(trip.id);
+        option.textContent = trip.correlativo + ' · ' + trip.unidad + ' · ' + trip.estado;
+        selector.appendChild(option);
+    });
+    
+    function setText(id, value) {
+        document.getElementById(id).textContent = value || '-';
+    }
+    
+    function formatDate(value) {
+        if (!value) return null;
+        var date = new Date(value);
+        if (Number.isNaN(date.getTime())) return null;
+        return date.toLocaleString('es-SV', { dateStyle: 'medium', timeStyle: 'short' });
+    }
+    
+    function decodePolyline(encoded) {
+        var points = [];
+        var index = 0;
+        var latitude = 0;
+        var longitude = 0;
+        while (index < encoded.length) {
+            var result = 0;
+            var shift = 0;
+            var byte;
+            do {
+                byte = encoded.charCodeAt(index++) - 63;
+                result |= (byte & 0x1f) << shift;
+                shift += 5;
+            } while (byte >= 0x20 && index < encoded.length);
+            latitude += (result & 1) ? ~(result >> 1) : (result >> 1);
+            result = 0;
+            shift = 0;
+            do {
+                byte = encoded.charCodeAt(index++) - 63;
+                result |= (byte & 0x1f) << shift;
+                shift += 5;
+            } while (byte >= 0x20 && index < encoded.length);
+            longitude += (result & 1) ? ~(result >> 1) : (result >> 1);
+            points.push([latitude / 100000, longitude / 100000]);
+        }
+        return points;
+    }
+    
+    function positionAge(value) {
+        var date = new Date(value);
+        var minutes = Math.max(0, Math.floor((Date.now() - date.getTime()) / 60000));
+        if (minutes < 1) return 'Hace menos de 1 min';
+        if (minutes < 60) return 'Hace ' + minutes + ' min';
+        return 'Hace ' + Math.floor(minutes / 60) + ' h';
+    }
+    
+    function setStatus(text, className) {
+        statusBadge.textContent = text;
+        statusBadge.className = 'badge ' + className;
+    }
+
+    var simInterval = null;
+    var simState = {
+        active: false,
+        paused: false,
+        progress: 0,
+        routePoints: [],
+        currentPointIndex: 0,
+        marker: null,
+        baseSpeed: 65,
+        trip: null
+    };
+
+    function generateRoutePoints(start, end, numPoints) {
+        var points = [];
+        for (var i = 0; i <= numPoints; i++) {
+            var ratio = i / numPoints;
+            var lat = start[0] + (end[0] - start[0]) * ratio;
+            var lng = start[1] + (end[1] - start[1]) * ratio;
+            points.push([lat, lng]);
+        }
+        return points;
+    }
+
+    function startSimulation() {
+        if (!simState.trip || !simState.trip.origen || !simState.trip.destino) {
+            alert('Selecciona un viaje válido para simular.');
+            return;
+        }
+        simState.routePoints = generateRoutePoints(simState.trip.origen, simState.trip.destino, 50);
+        simState.currentPointIndex = 0;
+        simState.progress = 0;
+        simState.active = true;
+        simState.paused = false;
+
+        document.getElementById('simControls').style.display = 'block';
+        document.getElementById('simBadge').style.display = 'inline-block';
+        document.getElementById('simulationNote').style.display = 'block';
+        document.getElementById('btnSimulate').disabled = true;
+        document.getElementById('btnStart').disabled = true;
+        document.getElementById('btnPause').disabled = false;
+        document.getElementById('simStatus').textContent = 'Simulando...';
+
+        if (simState.marker) layers.removeLayer(simState.marker);
+        simState.marker = L.circleMarker(simState.routePoints[0], {
+            radius: 8, color: '#dc3545', fillColor: '#dc3545', fillOpacity: 1, weight: 2
+        }).bindPopup('Vehículo simulado').addTo(layers);
+
+        simInterval = setInterval(updateSimulation, 1500);
+    }
+
+    function updateSimulation() {
+        if (simState.paused) return;
+        simState.currentPointIndex++;
+        simState.progress = (simState.currentPointIndex / (simState.routePoints.length - 1)) * 100;
+        if (simState.currentPointIndex >= simState.routePoints.length) {
+            completeSimulation();
+            return;
+        }
+        var currentCoords = simState.routePoints[simState.currentPointIndex];
+        var speedVariation = Math.random() * 10 - 5;
+        var currentSpeed = Math.max(0, simState.baseSpeed + speedVariation);
+
+        simState.marker.setLatLng(currentCoords);
+        simState.marker.setPopupContent('Velocidad: ' + currentSpeed.toFixed(1) + ' km/h<br>Progreso: ' + simState.progress.toFixed(0) + '%');
+
+        document.getElementById('simProgress').style.width = simState.progress + '%';
+        setText('tripSpeed', currentSpeed.toFixed(1) + ' km/h');
+        setText('lastPosition', 'Simulando...');
+
+        var totalDist = simState.trip.distancia_km ? parseFloat(simState.trip.distancia_km) : 50;
+        var remainingDist = totalDist * (1 - (simState.progress / 100));
+        var hoursRemaining = remainingDist / currentSpeed;
+        var etaDate = new Date(Date.now() + hoursRemaining * 60 * 60 * 1000);
+        setText('tripEta', etaDate.toLocaleString('es-SV', { hour: '2-digit', minute: '2-digit' }));
+    }
+
+    function pauseSimulation() {
+        simState.paused = !simState.paused;
+        var btn = document.getElementById('btnPause');
+        if (simState.paused) {
+            btn.innerHTML = '<i class="fas fa-play"></i> Continuar';
+            btn.classList.remove('btn-warning');
+            btn.classList.add('btn-success');
+            document.getElementById('simStatus').textContent = 'Pausado';
+        } else {
+            btn.innerHTML = '<i class="fas fa-pause"></i> Pausar';
+            btn.classList.remove('btn-success');
+            btn.classList.add('btn-warning');
+            document.getElementById('simStatus').textContent = 'Simulando...';
+        }
+    }
+
+    function resetSimulation() {
+        clearInterval(simInterval);
+        simState.active = false;
+        simState.paused = false;
+        simState.progress = 0;
+        simState.currentPointIndex = 0;
+
+        if (simState.marker) layers.removeLayer(simState.marker);
+        simState.marker = null;
+
+        document.getElementById('simControls').style.display = 'none';
+        document.getElementById('simBadge').style.display = 'none';
+        document.getElementById('simulationNote').style.display = 'none';
+        document.getElementById('btnSimulate').disabled = false;
+        document.getElementById('btnStart').disabled = false;
+        document.getElementById('btnPause').disabled = true;
+        document.getElementById('btnPause').innerHTML = '<i class="fas fa-pause"></i> Pausar';
+        document.getElementById('simProgress').style.width = '0%';
+        document.getElementById('simStatus').textContent = 'Listo para iniciar';
+        setText('tripSpeed', '-');
+        setText('lastPosition', 'Sin señal GPS');
+        setText('tripEta', '-');
+    }
+
+    function completeSimulation() {
+        clearInterval(simInterval);
+        simState.active = false;
+        document.getElementById('simStatus').textContent = '¡Llegada a destino!';
+        document.getElementById('btnPause').disabled = true;
+        if (simState.marker) {
+            simState.marker.setPopupContent('¡Destino alcanzado! (Simulación)');
+        }
+        alert('Simulación completada: El vehículo ha llegado a su destino.');
+    }
+
+    document.getElementById('btnSimulate').addEventListener('click', startSimulation);
+    document.getElementById('btnStart').addEventListener('click', startSimulation);
+    document.getElementById('btnPause').addEventListener('click', pauseSimulation);
+    document.getElementById('btnReset').addEventListener('click', resetSimulation);
+
+    async function renderTrip(trip) {
+        simState.trip = trip;
+
+        layers.clearLayers();
+        setText('tripCode', trip.correlativo);
+        setText('tripState', trip.estado.replace('_', ' '));
+        setText('tripUnit', trip.unidad);
+        setText('tripDriver', trip.conductor);
+        setText('tripRoute', trip.origen_nombre + ' → ' + trip.destino_nombre);
+        setText('tripDistance', trip.distancia_km ? Number(trip.distancia_km).toFixed(1) + ' km' : 'Calculando ruta...');
+        setText('tripEta', formatDate(trip.fecha_llegada_est) || 'Calculando ruta...');
+        setText('tripSpeed', '-');
+        setText('lastPosition', 'Sin señal GPS');
+        document.getElementById('mapCaption').textContent = trip.origen_nombre + ' → ' + trip.destino_nombre;
+        routeSource.textContent = 'Calculando ruta por carretera...';
+        setStatus('Sin señal GPS', 'bg-secondary');
+
+        var tripPositions = positions
+            .filter(function(position) { return String(position.id_viaje) === String(trip.id); })
+            .sort(function(first, second) { return new Date(first.fecha_hora) - new Date(second.fecha_hora); });
+        var latestPosition = tripPositions.length ? tripPositions[tripPositions.length - 1] : null;
+        var origin = trip.origen;
+        var destination = trip.destino;
+        var current = latestPosition ? [latestPosition.latitud, latestPosition.longitud] : null;
+        var start = current || origin;
+
+        if (latestPosition) {
+            var ageMinutes = Math.floor((Date.now() - new Date(latestPosition.fecha_hora).getTime()) / 60000);
+            setText('lastPosition', positionAge(latestPosition.fecha_hora));
+            setText('tripSpeed', latestPosition.velocidad_kmh === null ? '-' : Number(latestPosition.velocidad_kmh).toFixed(1) + ' km/h');
+            setStatus(ageMinutes <= 15 ? 'GPS reciente' : 'GPS atrasado', ageMinutes <= 15 ? 'bg-success' : 'bg-warning text-dark');
+        }
+        if (origin) {
+            L.circleMarker(origin, { radius: 7, color: '#1479cf', fillColor: '#1479cf', fillOpacity: 1 })
+                .bindPopup('Origen: ' + trip.origen_nombre).addTo(layers);
+        }
+        if (destination) {
+            L.circleMarker(destination, { radius: 8, color: '#b84235', fillColor: '#e65d4f', fillOpacity: 1 })
+                .bindPopup('Destino: ' + trip.destino_nombre).addTo(layers);
+        }
+        if (current) {
+            var trail = tripPositions.map(function(position) { return [position.latitud, position.longitud]; });
+            if (trail.length > 1) {
+                L.polyline(trail, { color: '#697b8d', weight: 3, opacity: 0.8, dashArray: '5 6' }).addTo(layers);
+            }
+            L.circleMarker(current, { radius: 9, color: '#fff', weight: 3, fillColor: '#1479cf', fillOpacity: 1 })
+                .bindPopup('Última ubicación GPS').addTo(layers);
+        }
+        if (start && destination) {
+            var directions = new URLSearchParams({
+                api: '1',
+                origin: start[0] + ',' + start[1],
+                destination: destination[0] + ',' + destination[1],
+                travelmode: 'driving'
+            });
+            mapsLink.href = 'https://www.google.com/maps/dir/?' + directions.toString();
+            mapsLink.classList.remove('disabled');
+            mapsLink.setAttribute('aria-disabled', 'false');
+            var routeSucceeded = false;
+            try {
+                var routeUrl = routingApiUrl + '/route/v1/driving/' + start[1] + ',' + start[0] + ';' + destination[1] + ',' + destination[0] + '?overview=full&geometries=geojson';
+                var response = await fetch(routeUrl);
+                var routeData = await response.json();
+                var route = routeData.routes && routeData.routes[0];
+                if (response.ok && route) {
+                    L.geoJSON(route.geometry, { style: { color: '#1769aa', weight: 5, opacity: 0.85 } }).addTo(layers);
+                    setText('tripDistance', (route.distance / 1000).toFixed(1) + ' km');
+                    var departure = trip.estado === 'PROGRAMADO' ? (trip.fecha_programada || trip.fecha_salida) : null;
+                    var departureDate = departure ? new Date(departure) : new Date();
+                    if (Number.isNaN(departureDate.getTime()) || departureDate < new Date()) departureDate = new Date();
+                    setText('tripEta', formatDate(new Date(departureDate.getTime() + route.duration * 1000).toISOString()));
+                    routeSource.textContent = 'Ruta y ETA calculadas por carretera con OSRM.';
+                    routeSucceeded = true;
+                }
+            } catch (error) {
+                routeSource.textContent = 'No se pudo consultar el servicio de rutas.';
+            }
+            if (!routeSucceeded) {
+                if (trip.polyline) {
+                    var decodedRoute = decodePolyline(trip.polyline);
+                    if (decodedRoute.length > 1) {
+                        L.polyline(decodedRoute, { color: '#1769aa', weight: 5, opacity: 0.85 }).addTo(layers);
+                        routeSource.textContent = 'Mostrando la ruta guardada del viaje.';
+                    }
+                }
+                if (!trip.polyline) {
+                    L.polyline([start, destination], { color: '#1769aa', weight: 4, opacity: 0.75, dashArray: '8 7' }).addTo(layers);
+                    routeSource.textContent = 'Ruta directa aproximada; el servicio de rutas no respondió.';
+                }
+            }
+            var bounds = L.latLngBounds([start, destination]);
+            tripPositions.forEach(function(position) { bounds.extend([position.latitud, position.longitud]); });
+            map.fitBounds(bounds.pad(0.15), { maxZoom: 13 });
+        } else {
+            mapsLink.href = '#';
+            mapsLink.classList.add('disabled');
+            mapsLink.setAttribute('aria-disabled', 'true');
+            routeSource.textContent = 'Faltan coordenadas de origen o destino para calcular la ruta.';
+            if (start) map.setView(start, 12);
+            else if (destination) map.setView(destination, 12);
+        }
+        
+        setTimeout(function() {
+            map.invalidateSize();
+        }, 200);
+    }
+    
+    selector.addEventListener('change', function() {
+        resetSimulation();
+        var trip = trips.find(function(item) { return String(item.id) === this.value; }, this);
+        if (trip) renderTrip(trip);
+    });
+    
+    document.getElementById('refreshTracking').addEventListener('click', function() {
+        window.location.reload();
+    });
+    
+    if (trips.length) {
+        selector.value = String(trips[0].id);
+        renderTrip(trips[0]);
+    } else {
+        setStatus('Sin viajes', 'bg-secondary');
+        document.getElementById('trackingNote').textContent = 'No hay viajes programados, en curso ni con posiciones GPS recibidas.';
+    }
+});
+</script>
+{% endblock %}

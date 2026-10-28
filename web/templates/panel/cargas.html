@@ -1,0 +1,348 @@
+{% extends 'panel/base.html' %}
+{% block title %}Cargas{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h2 class="fw-bold"><i class="fas fa-boxes me-2 text-primary"></i>Gestión de Cargas</h2>
+        <p class="text-muted">Registrar mercadería disponible para asignar a viajes</p>
+    </div>
+</div>
+
+<div class="row g-4">
+    {% if is_admin %}
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h6 class="mb-0" id="formTitle"><i class="fas fa-plus-circle me-1 text-primary"></i>Nueva Carga</h6>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="resetForm()" style="display:none;" id="btnCancel"><i class="fas fa-times"></i> Cancelar</button>
+            </div>
+            <div class="card-body">
+                <form method="POST" id="cargaForm">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" id="formAction" value="create">
+                    <input type="hidden" name="id_carga" id="formId">
+
+                  
+                    
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold" for="f_descripcion">¿Qué mercancía va a agregar?</label>
+                        <input type="text" name="descripcion" id="f_descripcion" class="form-control form-control-sm" required maxlength="200" placeholder="Ej.: Maíz">
+                    </div>
+                    
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold" for="f_tipo_carga">¿Qué tipo de carga es?</label>
+                        <select name="id_tipo_carga" id="f_tipo_carga" class="form-select form-select-sm" required>
+                            <option value="">Seleccione una categoría...</option>
+                            {% for t in tipos_carga %}<option value="{{ t.id_tipo_carga }}">{{ t.nombre }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-6 mb-2">
+                            <label class="form-label small fw-bold" for="f_cantidad">¿Cuántos?</label>
+                            <input type="number" min="1" name="cantidad" id="f_cantidad" class="form-control form-control-sm" placeholder="Ej.: 500" step="1" required>
+                        </div>
+                        <div class="col-6 mb-2">
+                            <label class="form-label small fw-bold" for="f_unidad">¿En qué unidad?</label>
+                            <select name="unidad_medida" id="f_unidad" class="form-select form-select-sm" required disabled>
+                                <option value="">Seleccione tipo de carga</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold" for="f_peso">Peso total en toneladas (opcional)</label>
+                        <input type="number" min="0" step="0.01" name="peso_ton" id="f_peso" class="form-control form-control-sm" placeholder="Ej.: 2.50">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold" for="f_documento">Número de documento (opcional)</label>
+                        <input type="text" name="documento_ref" id="f_documento" class="form-control form-control-sm" maxlength="50" placeholder="Ej.: OC-2026-001">
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary btn-sm w-100" id="btnSubmit"><i class="fas fa-save me-1"></i>Guardar Carga</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="{% if is_admin %}col-md-8{% else %}col-md-12{% endif %}">
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h6 class="mb-0"><i class="fas fa-list me-2 text-primary"></i>Cargas Disponibles</h6>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Descripción</th>
+                                <th>Tipo</th>
+                                <th>Cantidad</th>
+                                <th>Peso (Ton)</th>
+                                <th>Viaje</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for c in cargas %}
+                                {% if not c.viaje_correlativo %}
+                            <tr data-id="{{ c.id_carga }}" 
+                                data-descripcion="{{ c.descripcion|default:'' }}"
+                                data-tipo="{{ c.id_tipo_carga|default:'' }}"
+                                data-cantidad="{{ c.cantidad|default:'' }}"
+                                data-unidad="{{ c.unidad_medida|default:'' }}"
+                                data-peso="{{ c.peso_ton|default:'' }}"
+                                data-documento="{{ c.documento_ref|default:'' }}">
+                                <td><strong>{{ c.descripcion|default:"-" }}</strong></td>
+                                <td>{{ c.tipo_carga_nombre|default:"-" }}</td>
+                                <td>{{ c.cantidad|default:"-" }} {{ c.unidad_medida|default:"" }}</td>
+                                <td>{{ c.peso_ton|default:"-" }} Ton</td>
+                                <td><span class="badge bg-warning text-dark"><i class="fas fa-check-circle me-1"></i>Disponible</span></td>
+                                <td>
+                                    {% if is_admin %}
+                                        <button class="btn btn-sm btn-info text-white btn-editar" title="Editar" {% if c.viaje_correlativo %}disabled{% endif %}><i class="fas fa-edit"></i></button>
+                                        <form method="POST" style="display:inline;" onsubmit="return confirm('¿Eliminar esta carga?');">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="action" value="delete">
+                                            <input type="hidden" name="id_carga" value="{{ c.id_carga }}">
+                                            <button type="submit" class="btn btn-sm btn-danger" title="Eliminar"><i class="fas fa-trash"></i></button>
+                                        </form>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                                {% endif %}
+                            {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center text-muted py-4">
+                                    <i class="fas fa-boxes fa-2x mb-2 d-block"></i>
+                                    No hay cargas disponibles
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h6 class="mb-0"><i class="fas fa-route me-2 text-success"></i>Cargas Asignadas a Viajes</h6>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Descripción</th>
+                                <th>Tipo</th>
+                                <th>Cantidad</th>
+                                <th>Peso (Ton)</th>
+                                <th>Viaje</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for c in cargas %}
+                                {% if c.viaje_correlativo %}
+                                <tr>
+                                    <td><strong>{{ c.descripcion|default:"-" }}</strong></td>
+                                    <td>{{ c.tipo_carga_nombre|default:"-" }}</td>
+                                    <td>{{ c.cantidad|default:"-" }} {{ c.unidad_medida|default:"" }}</td>
+                                    <td>{{ c.peso_ton|default:"-" }} Ton</td>
+                                    <td><span class="badge bg-success"><i class="fas fa-route me-1"></i>{{ c.viaje_correlativo }}</span></td>
+                                </tr>
+                                {% endif %}
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="text-center text-muted py-4">No hay cargas asignadas a viajes</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var form = document.getElementById('cargaForm');
+    var unidadInput = document.getElementById('f_unidad');
+    var tipoInput = document.getElementById('f_tipo_carga');
+    var descripcionInput = document.getElementById('f_descripcion');
+    var documentoInput = document.getElementById('f_documento');
+
+    var unidades = {
+        embaladas: ['cajas', 'sacos', 'bolsas', 'paquetes', 'fardos', 'unidades'],
+        granel: ['toneladas', 'kilogramos', 'metros cúbicos'],
+        liquidas: ['litros', 'metros cúbicos', 'galones', 'tambores', 'bidones', 'cisternas'],
+        combustible: ['litros', 'galones', 'tambores', 'bidones', 'cisternas'],
+        gases: ['kilogramos', 'metros cúbicos', 'cilindros', 'tanques'],
+        vehiculos: ['unidades']
+    };
+
+    function obtenerUnidadesPermitidas(nombreTipo) {
+        if (/combustible|gasolina|diesel/.test(nombreTipo)) return unidades.combustible;
+        if (/gas|cilindro/.test(nombreTipo)) return unidades.gases;
+        if (/liquid|aceite|agua/.test(nombreTipo)) return unidades.liquidas;
+        if (/granel|mineral|arena|cereal|agricol/.test(nombreTipo)) return unidades.granel;
+        if (/vehicul|autom/.test(nombreTipo)) return unidades.vehiculos;
+        return unidades.embaladas;
+    }
+
+    function actualizarUnidades(valorActual) {
+        if (!unidadInput) return;
+        var nombreTipo = tipoInput && tipoInput.selectedIndex > 0
+            ? tipoInput.options[tipoInput.selectedIndex].text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            : '';
+        if (!nombreTipo) {
+            unidadInput.innerHTML = '<option value="">Seleccione tipo de carga...</option>';
+            unidadInput.value = '';
+            unidadInput.disabled = true;
+            return;
+        }
+        var disponibles = obtenerUnidadesPermitidas(nombreTipo);
+
+        unidadInput.innerHTML = '<option value="">Seleccione una unidad...</option>';
+        unidadInput.disabled = false;
+        disponibles.forEach(function(unidad) {
+            var option = document.createElement('option');
+            option.value = unidad;
+            option.textContent = unidad.charAt(0).toUpperCase() + unidad.slice(1);
+            unidadInput.appendChild(option);
+        });
+        unidadInput.value = valorActual && disponibles.includes(valorActual) ? valorActual : '';
+    }
+
+    if (tipoInput) tipoInput.addEventListener('change', function() { actualizarUnidades(''); });
+    actualizarUnidades('');
+
+    function validarDocumento() {
+        if (!documentoInput) return;
+        documentoInput.value = documentoInput.value.replace(/[^A-Za-z0-9ÁÉÍÓÚáéíóúÑñ\-_/\s]/g, '').trim();
+    }
+
+    if (descripcionInput) {
+        descripcionInput.addEventListener('input', function() {
+            this.value = this.value.replace(/\s{2,}/g, ' ').trimStart();
+        });
+    }
+
+    if (documentoInput) {
+        documentoInput.addEventListener('input', validarDocumento);
+    }
+
+    if (form) {
+        form.addEventListener('submit', function(event) {
+            var descripcion = descripcionInput ? descripcionInput.value.trim() : '';
+            var tipoCarga = document.getElementById('f_tipo_carga') ? document.getElementById('f_tipo_carga').value : '';
+            var cantidad = document.getElementById('f_cantidad') ? document.getElementById('f_cantidad').value : '';
+            var unidad = unidadInput ? unidadInput.value.trim() : '';
+            var peso = document.getElementById('f_peso') ? document.getElementById('f_peso').value : '';
+            var documento = documentoInput ? documentoInput.value.trim() : '';
+
+            if (!descripcion) {
+                event.preventDefault();
+                descripcionInput.focus();
+                alert('Debe ingresar la descripción de la mercadería.');
+                return;
+            }
+
+            if (descripcion.length < 3 || descripcion.length > 200) {
+                event.preventDefault();
+                descripcionInput.focus();
+                alert('La descripción debe tener entre 3 y 200 caracteres.');
+                return;
+            }
+
+            if (!tipoCarga) {
+                event.preventDefault();
+                document.getElementById('f_tipo_carga').focus();
+                alert('Debe seleccionar el tipo de carga.');
+                return;
+            }
+
+            if (cantidad === '' || !Number.isFinite(Number(cantidad)) || Number(cantidad) <= 0 || !Number.isInteger(Number(cantidad))) {
+                event.preventDefault();
+                document.getElementById('f_cantidad').focus();
+                alert('La cantidad debe ser un número entero mayor que 0.');
+                return;
+            }
+
+            if (!unidad) {
+                event.preventDefault();
+                unidadInput.focus();
+                alert('Debe ingresar la unidad de embalaje.');
+                return;
+            }
+
+            var nombreTipo = tipoInput && tipoInput.selectedIndex > 0
+                ? tipoInput.options[tipoInput.selectedIndex].text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                : '';
+            var unidadesPermitidas = obtenerUnidadesPermitidas(nombreTipo);
+            if (!unidadesPermitidas.includes(unidad)) {
+                event.preventDefault();
+                unidadInput.focus();
+                alert(/combustible|gasolina|diesel/.test(nombreTipo)
+                    ? 'El combustible no puede transportarse en cajas. Seleccione litros, galones, tambores, bidones o cisternas.'
+                    : 'La unidad seleccionada no corresponde al tipo de carga.');
+                return;
+            }
+
+            if (peso !== '' && (!Number.isFinite(Number(peso)) || Number(peso) < 0)) {
+                event.preventDefault();
+                document.getElementById('f_peso').focus();
+                alert('El peso en toneladas no puede ser negativo.');
+                return;
+            }
+
+            if (documento && !/^[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ\-_/\s]+$/.test(documento)) {
+                event.preventDefault();
+                documentoInput.focus();
+                alert('El documento de referencia solo puede contener letras, números, guiones y espacios.');
+                return;
+            }
+        });
+    }
+
+    document.querySelectorAll('.btn-editar').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var row = this.closest('tr');
+            
+            document.getElementById('formTitle').innerHTML = '<i class="fas fa-edit me-1 text-success"></i>Editar Carga';
+            document.getElementById('btnCancel').style.display = 'block';
+            document.getElementById('formAction').value = 'update';
+            document.getElementById('formId').value = row.getAttribute('data-id');
+            document.getElementById('btnSubmit').innerHTML = '<i class="fas fa-save me-1"></i>Actualizar Carga';
+            document.getElementById('btnSubmit').classList.replace('btn-primary', 'btn-success');
+            
+            document.getElementById('f_descripcion').value = row.getAttribute('data-descripcion');
+            document.getElementById('f_tipo_carga').value = row.getAttribute('data-tipo');
+            actualizarUnidades(row.getAttribute('data-unidad'));
+            document.getElementById('f_cantidad').value = row.getAttribute('data-cantidad');
+            document.getElementById('f_peso').value = row.getAttribute('data-peso');
+            document.getElementById('f_documento').value = row.getAttribute('data-documento');
+            
+            document.getElementById('cargaForm').scrollIntoView({ behavior: 'smooth' });
+        });
+    });
+});
+
+function resetForm() {
+    document.getElementById('cargaForm').reset();
+    var unidadInput = document.getElementById('f_unidad');
+    unidadInput.innerHTML = '<option value="">Seleccione primero el tipo de carga...</option>';
+    unidadInput.disabled = true;
+    document.getElementById('formTitle').innerHTML = '<i class="fas fa-plus-circle me-1 text-primary"></i>Nueva Carga';
+    document.getElementById('btnCancel').style.display = 'none';
+    document.getElementById('formAction').value = 'create';
+    document.getElementById('formId').value = '';
+    document.getElementById('btnSubmit').innerHTML = '<i class="fas fa-save me-1"></i>Guardar Carga';
+    document.getElementById('btnSubmit').classList.replace('btn-success', 'btn-primary');
+}
+</script>
+{% endblock %}

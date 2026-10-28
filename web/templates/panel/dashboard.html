@@ -1,0 +1,322 @@
+{% extends 'panel/base.html' %}
+
+{% block title %}Inicio - Control de Flota{% endblock %}
+
+{% block content %}
+<style>
+    .dashboard-header {
+        border-radius: 1rem;
+        background: linear-gradient(120deg, #123b68, #2878b8);
+        color: #fff;
+    }
+
+    .dashboard-header .text-white-75 {
+        color: rgba(255, 255, 255, .78);
+    }
+
+    .dashboard-card {
+        border: 0;
+        border-radius: .85rem;
+    }
+
+    .dashboard-metric {
+        min-height: 142px;
+    }
+
+    .dashboard-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: .8rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+    }
+
+    .dashboard-table {
+        min-width: 720px;
+    }
+
+    .dashboard-table th {
+        color: #5b6570;
+        font-size: .75rem;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+</style>
+
+<div class="dashboard-header p-4 p-lg-5 mb-4 shadow-sm">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <div>
+            <div class="small text-white-75 mb-2">RESUMEN OPERATIVO</div>
+            <h1 class="h3 fw-bold mb-2">Hola, {{ user_data.nombre|default:"bienvenido" }}</h1>
+            <p class="text-white-75 mb-0">Aquí puedes revisar cómo está la flota y qué viajes requieren atención.</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{% url 'panel:viajes' %}" class="btn btn-light text-primary fw-semibold">
+                <i class="fas fa-route me-1"></i>Ver viajes
+            </a>
+            <a href="{% url 'panel:control' %}" class="btn btn-outline-light fw-semibold">
+                <i class="fas fa-gas-pump me-1"></i>Control de unidades
+            </a>
+        </div>
+    </div>
+</div>
+
+{% if dashboard_error %}
+<div class="alert alert-warning" role="alert">
+    <i class="fas fa-exclamation-triangle me-2"></i>{{ dashboard_error }}
+</div>
+{% endif %}
+
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+    <div>
+        <h2 class="h5 fw-bold mb-1">Estado de la flota</h2>
+        <p class="text-muted small mb-0">Unidades activas y situación actual de los viajes.</p>
+    </div>
+    <a href="{% url 'panel:unidades' %}" class="small text-decoration-none">Administrar unidades <i class="fas fa-arrow-right ms-1"></i></a>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-xl-3">
+        <div class="card dashboard-card dashboard-metric shadow-sm h-100">
+            <div class="card-body d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="text-muted small mb-2">Unidades activas</div>
+                    <div class="display-6 fw-bold">{{ total_unidades }}</div>
+                    <div class="small text-muted mt-2">En el catálogo de flota</div>
+                </div>
+                <span class="dashboard-icon bg-primary bg-opacity-10 text-primary"><i class="fas fa-truck"></i></span>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card dashboard-card dashboard-metric shadow-sm h-100">
+            <div class="card-body d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="text-muted small mb-2">Disponibles</div>
+                    <div class="display-6 fw-bold text-success">{{ unidades_disponibles }}</div>
+                    <div class="small text-muted mt-2">Pueden asignarse a un viaje</div>
+                </div>
+                <span class="dashboard-icon bg-success bg-opacity-10 text-success"><i class="fas fa-check-circle"></i></span>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card dashboard-card dashboard-metric shadow-sm h-100">
+            <div class="card-body d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="text-muted small mb-2">Viajes en curso</div>
+                    <div class="display-6 fw-bold text-info">{{ viajes_en_curso }}</div>
+                    <div class="small text-muted mt-2">Unidades en ruta</div>
+                </div>
+                <span class="dashboard-icon bg-info bg-opacity-10 text-info"><i class="fas fa-route"></i></span>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card dashboard-card dashboard-metric shadow-sm h-100">
+            <div class="card-body d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="text-muted small mb-2">Viajes programados</div>
+                    <div class="display-6 fw-bold text-warning">{{ viajes_programados }}</div>
+                    <div class="small text-muted mt-2">Pendientes de iniciar</div>
+                </div>
+                <span class="dashboard-icon bg-warning bg-opacity-10 text-warning"><i class="fas fa-calendar-check"></i></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-12 col-lg-7">
+        <div class="card dashboard-card shadow-sm h-100">
+            <div class="card-body p-4">
+                <h2 class="h6 fw-bold mb-1">Disponibilidad de unidades</h2>
+                <p class="text-muted small mb-4">Distribución por estado actual.</p>
+
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between small mb-1">
+                        <span><i class="fas fa-circle text-success me-1"></i>Disponibles</span>
+                        <strong>{{ unidades_disponibles }}</strong>
+                    </div>
+                    <div class="progress" role="progressbar" aria-label="Unidades disponibles" aria-valuenow="{{ unidades_disponibles_pct }}" aria-valuemin="0" aria-valuemax="100" style="height: .6rem;">
+                        <div class="progress-bar bg-success" style="width: {{ unidades_disponibles_pct }}%"></div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between small mb-1">
+                        <span><i class="fas fa-circle text-info me-1"></i>En viaje</span>
+                        <strong>{{ unidades_en_viaje }}</strong>
+                    </div>
+                    <div class="progress" role="progressbar" aria-label="Unidades en viaje" aria-valuenow="{{ unidades_en_viaje_pct }}" aria-valuemin="0" aria-valuemax="100" style="height: .6rem;">
+                        <div class="progress-bar bg-info" style="width: {{ unidades_en_viaje_pct }}%"></div>
+                    </div>
+                </div>
+                <div>
+                    <div class="d-flex justify-content-between small mb-1">
+                        <span><i class="fas fa-circle text-warning me-1"></i>En mantenimiento</span>
+                        <strong>{{ unidades_mantenimiento }}</strong>
+                    </div>
+                    <div class="progress" role="progressbar" aria-label="Unidades en mantenimiento" aria-valuenow="{{ unidades_mantenimiento_pct }}" aria-valuemin="0" aria-valuemax="100" style="height: .6rem;">
+                        <div class="progress-bar bg-warning" style="width: {{ unidades_mantenimiento_pct }}%"></div>
+                    </div>
+                </div>
+                {% if unidades_otros_estados %}
+                <div class="mt-3">
+                    <div class="d-flex justify-content-between small mb-1">
+                        <span><i class="fas fa-circle text-secondary me-1"></i>Otros estados</span>
+                        <strong>{{ unidades_otros_estados }}</strong>
+                    </div>
+                    <div class="progress" role="progressbar" aria-label="Unidades en otros estados" aria-valuenow="{{ unidades_otros_estados_pct }}" aria-valuemin="0" aria-valuemax="100" style="height: .6rem;">
+                        <div class="progress-bar bg-secondary" style="width: {{ unidades_otros_estados_pct }}%"></div>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if unidades_combustible_bajo or unidades_sin_lectura %}
+                <div class="alert alert-warning d-flex align-items-center justify-content-between gap-3 mt-4 mb-0">
+                    <div>
+                        <strong><i class="fas fa-gas-pump me-1"></i>Combustible por revisar</strong>
+                        <div class="small mt-1">
+                            {{ unidades_combustible_bajo }} con 25% o menos del tanque
+                            {% if unidades_sin_lectura %} · {{ unidades_sin_lectura }} sin lectura{% endif %}
+                        </div>
+                    </div>
+                    <a href="{% url 'panel:unidades' %}" class="btn btn-sm btn-outline-dark flex-shrink-0">Revisar</a>
+                </div>
+                {% else %}
+                <div class="small text-success mt-4"><i class="fas fa-check-circle me-1"></i>No hay unidades activas con combustible bajo o sin lectura.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-5">
+        <div class="card dashboard-card shadow-sm h-100">
+            <div class="card-body p-4">
+                <h2 class="h6 fw-bold mb-1">Actividad de los últimos 30 días</h2>
+                <p class="text-muted small mb-3">Solo cuenta viajes finalizados dentro del período.</p>
+                <div class="d-flex justify-content-between align-items-center py-3 border-bottom">
+                    <span class="text-muted"><i class="fas fa-flag-checkered me-2 text-success"></i>Viajes finalizados</span>
+                    <strong class="fs-5">{{ viajes_ultimos_30_dias }}</strong>
+                </div>
+                <div class="d-flex justify-content-between align-items-center py-3 border-bottom">
+                    <span class="text-muted"><i class="fas fa-road me-2 text-primary"></i>Distancia recorrida</span>
+                    <strong>{{ km_ultimos_30_dias|floatformat:0 }} km</strong>
+                </div>
+                <div class="d-flex justify-content-between align-items-center py-3">
+                    <span class="text-muted"><i class="fas fa-gauge-high me-2 text-info"></i>Rendimiento promedio</span>
+                    {% if rendimiento_ultimos_30_dias %}
+                    <strong>{{ rendimiento_ultimos_30_dias|floatformat:2 }} km/gal</strong>
+                    {% else %}
+                    <strong class="text-muted">Sin datos</strong>
+                    {% endif %}
+                </div>
+                <div class="small text-muted">Rendimiento = kilómetros recorridos ÷ galones consumidos en viajes con lecturas válidas.</div>
+
+                {% if total_viajes %}
+                <hr class="my-4">
+                <h3 class="small fw-bold mb-3">Estado de todos los viajes ({{ total_viajes }})</h3>
+                <div class="row g-2 small">
+                    <div class="col-6 d-flex justify-content-between">
+                        <span><i class="fas fa-circle text-warning me-1"></i>Programados</span>
+                        <strong>{{ viajes_programados }}</strong>
+                    </div>
+                    <div class="col-6 d-flex justify-content-between">
+                        <span><i class="fas fa-circle text-info me-1"></i>En curso</span>
+                        <strong>{{ viajes_en_curso }}</strong>
+                    </div>
+                    <div class="col-6 d-flex justify-content-between">
+                        <span><i class="fas fa-circle text-success me-1"></i>Completados</span>
+                        <strong>{{ viajes_completados }}</strong>
+                    </div>
+                    <div class="col-6 d-flex justify-content-between">
+                        <span><i class="fas fa-circle text-secondary me-1"></i>Cancelados</span>
+                        <strong>{{ viajes_cancelados }}</strong>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-12 col-lg-7">
+        <div class="card dashboard-card shadow-sm h-100">
+            <div class="card-header bg-white border-0 px-4 pt-4 d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="h6 fw-bold mb-1">Viajes recientes</h2>
+                    <p class="text-muted small mb-0">Últimos movimientos y programaciones.</p>
+                </div>
+                <a href="{% url 'panel:viajes' %}" class="btn btn-sm btn-outline-primary">Ver viajes</a>
+            </div>
+            <div class="card-body px-4">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle dashboard-table mb-0">
+                        <thead class="table-light">
+                            <tr><th>Viaje</th><th>Ruta</th><th>Unidad</th><th>Estado</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for viaje in viajes_recientes %}
+                            <tr>
+                                <td>
+                                    <strong>{{ viaje.correlativo|default:"-" }}</strong>
+                                    <div class="small text-muted">{{ viaje.fecha_dashboard }}</div>
+                                </td>
+                                <td><small>{{ viaje.origen_nombre|default:"-" }} → {{ viaje.destino_nombre|default:"-" }}</small></td>
+                                <td>{{ viaje.unidad_placa|default:"-" }}</td>
+                                <td>
+                                    {% if viaje.estado_dashboard == 1 %}
+                                        <span class="badge text-bg-warning">Programado</span>
+                                    {% elif viaje.estado_dashboard == 2 %}
+                                        <span class="badge text-bg-info">En curso</span>
+                                    {% elif viaje.estado_dashboard == 3 %}
+                                        <span class="badge text-bg-success">Completado</span>
+                                    {% elif viaje.estado_dashboard == 4 %}
+                                        <span class="badge text-bg-secondary">Cancelado</span>
+                                    {% else %}
+                                        <span class="badge text-bg-light text-dark">Sin estado</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="4" class="text-center text-muted py-4">Todavía no hay viajes registrados.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-5">
+        <div class="card dashboard-card shadow-sm h-100">
+            <div class="card-header bg-white border-0 px-4 pt-4 d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="h6 fw-bold mb-1"><i class="fas fa-triangle-exclamation text-warning me-1"></i>Viajes a revisar</h2>
+                    <p class="text-muted small mb-0">Alertas de rendimiento registradas.</p>
+                </div>
+                <a href="{% url 'panel:viajes' %}" class="btn btn-sm btn-outline-primary">Ver viajes</a>
+            </div>
+            <div class="card-body px-4">
+                {% for viaje in viajes_con_alerta %}
+                <div class="d-flex justify-content-between gap-3 py-3 {% if not forloop.last %}border-bottom{% endif %}">
+                    <div>
+                        <strong>{{ viaje.correlativo|default:"Viaje" }}</strong>
+                        <div class="small text-muted">{{ viaje.unidad_placa|default:"Unidad sin identificar" }} · {{ viaje.origen_nombre|default:"-" }} → {{ viaje.destino_nombre|default:"-" }}</div>
+                    </div>
+                    <span class="badge text-bg-warning align-self-center">Revisar</span>
+                </div>
+                {% empty %}
+                <div class="text-center text-muted py-4">
+                    <i class="fas fa-circle-check fa-2x text-success mb-2"></i>
+                    <p class="mb-0">No hay viajes con alerta de rendimiento.</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

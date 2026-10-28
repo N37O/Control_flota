@@ -1,0 +1,467 @@
+{% extends 'panel/base.html' %}
+{% block title %}Control de Flota{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h2 class="fw-bold"><i class="fas fa-gas-pump me-2 text-primary"></i>Salidas, llegadas y combustible</h2>
+        <p class="text-muted">Elige una acción y completa solo los datos necesarios para registrar combustible o un movimiento.</p>
+    </div>
+</div>
+
+<ul class="nav nav-tabs mb-4" id="controlTab" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="combustible-tab" data-bs-toggle="tab" data-bs-target="#combustible" type="button">
+            <i class="fas fa-gas-pump me-1"></i> Cargar combustible
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="movimiento-tab" data-bs-toggle="tab" data-bs-target="#movimiento" type="button">
+            <i class="fas fa-exchange-alt me-1"></i> Registrar movimiento
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content" id="controlTabContent">
+    <!-- PESTAÑA COMBUSTIBLE -->
+    <div class="tab-pane fade show active" id="combustible" role="tabpanel">
+        <div class="row g-4">
+            {% if is_admin %}
+            <div class="col-md-5">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-white">
+                        <h6 class="mb-1"><i class="fas fa-plus-circle me-1 text-primary"></i>Registrar una carga</h6>
+                        <small class="text-muted">Completa los datos de la compra y el nivel que marca el tanque al terminar.</small>
+                    </div>
+                    <div class="card-body">
+                        <form method="POST">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="registrar_recarga">
+                            
+                            <h6 class="text-primary mb-3">1. Unidad</h6>
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold" for="recarga_unidad">¿A qué unidad cargaste combustible?</label>
+                                <select name="id_unidad" id="recarga_unidad" class="form-select" required>
+                                    <option value="">Selecciona una unidad...</option>
+                                    {% for u in unidades %}
+                                        <option value="{{ u.id_unidad }}"
+                                            data-capacidad="{{ u.capacidad_tanque_gal|default:'' }}"
+                                            data-actual="{{ u.combustible_actual_gal|default:'' }}">
+                                            {{ u.placa }}
+                                            {% if u.combustible_actual_gal != None %}
+                                                (actual: {{ u.combustible_actual_gal }} gal)
+                                            {% else %}
+                                                (sin lectura actual)
+                                            {% endif %}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                                <div class="form-text">El nivel que registres se mostrará como combustible actual de esta unidad.</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold" for="recarga_viaje">¿La carga pertenece a un viaje?</label>
+                                <select name="id_viaje" id="recarga_viaje" class="form-select">
+                                    <option value="">Carga de unidad, sin viaje</option>
+                                    {% for v in viajes_recarga %}
+                                        <option value="{{ v.id_viaje }}"
+                                            data-unidad="{{ v.id_unidad }}"
+                                            data-estado="{{ v.id_estado_viaje }}">
+                                            {{ v.correlativo }} - {{ v.unidad_placa }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                                <div class="form-text" id="recarga_viaje_ayuda">Si todavía no hay viaje, deja esta opción como está.</div>
+                            </div>
+                            <h6 class="text-primary mb-3 mt-4">2. Datos de la compra</h6>
+                            <div class="row g-3">
+                                <div class="col-sm-6">
+                                    <label class="form-label fw-semibold" for="recarga_galones">¿Cuántos galones compraste?</label>
+                                    <input type="number" step="0.01" min="0.01" inputmode="decimal" name="galones" id="recarga_galones" class="form-control" required>
+                                    <div class="form-text" id="recarga_ayuda">Indica la cantidad que aparece en el comprobante.</div>
+                                </div>
+                                <div class="col-sm-6">
+                                    <label class="form-label fw-semibold" for="recarga_precio">Precio por galón ($)</label>
+                                    <input type="number" step="0.001" min="0.001" inputmode="decimal" name="precio_galon" id="recarga_precio" class="form-control" required>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label fw-semibold" for="recarga_fecha">¿Cuándo se hizo la compra?</label>
+                                    <input type="datetime-local" id="recarga_fecha" name="fecha_hora" class="form-control" value="{% now 'Y-m-d\\TH:i' %}" max="{% now 'Y-m-d\\TH:i' %}" required>
+                                </div>
+                            </div>
+
+                            <h6 class="text-primary mb-3 mt-4">3. Actualizar el nivel de combustible</h6>
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold" for="recarga_nivel">Después de cargar, ¿cuántos galones marca el tanque?</label>
+                                <input type="number" step="0.01" min="0.01" inputmode="decimal" name="nivel_tanque_gal" id="recarga_nivel" class="form-control" required>
+                                <div class="form-text">Lee el indicador del tanque al terminar. Escribe el nivel total que quedó, no los galones comprados.</div>
+                            </div>
+
+                            <details class="mb-3">
+                                <summary class="text-muted">Agregar datos del comprobante (opcional)</summary>
+                                <div class="row g-3 mt-1">
+                                    <div class="col-sm-6">
+                                        <label class="form-label" for="recarga_lugar">Gasolinera o lugar</label>
+                                        <input type="text" id="recarga_lugar" name="lugar" class="form-control" placeholder="Nombre de la gasolinera" maxlength="150">
+                                    </div>
+                                    <div class="col-sm-6">
+                                        <label class="form-label" for="recarga_factura">Número de factura</label>
+                                        <input type="text" id="recarga_factura" name="numero_factura" class="form-control" placeholder="Número del comprobante" maxlength="50">
+                                    </div>
+                                </div>
+                            </details>
+                            <button type="submit" class="btn btn-primary w-100"><i class="fas fa-save me-1"></i>Guardar carga</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            
+            <div class="{% if is_admin %}col-md-7{% else %}col-md-12{% endif %}">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-white"><h6 class="mb-0"><i class="fas fa-history me-2 text-primary"></i>Compras de combustible registradas</h6></div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover table-sm align-middle" style="min-width: 760px;">
+                                <thead class="table-light">
+                                    <tr><th>Fecha y hora</th><th>Viaje</th><th>Unidad</th><th>Galones comprados</th><th>Nivel después de cargar</th><th>Costo por galón</th><th>Lugar</th><th>Factura</th></tr>
+                                </thead>
+                                <tbody>
+                                    {% for r in historial_recargas %}
+                                    <tr>
+                                        <td class="text-nowrap"><small>{{ r.fecha_hora }}</small></td>
+                                        <td class="text-nowrap"><strong>{{ r.viaje_correlativo|default:"-" }}</strong></td>
+                                        <td class="text-nowrap"><small>{{ r.unidad_placa|default:"-" }}</small></td>
+                                        <td class="text-nowrap"><span class="badge bg-info">{{ r.galones }} gal</span></td>
+                                        <td class="text-nowrap"><span class="badge bg-success">{{ r.nivel_tanque_gal|default:"-" }} gal</span></td>
+                                        <td class="text-nowrap"><small>${{ r.precio_galon }}</small></td>
+                                        <td class="text-nowrap"><small>{{ r.lugar|default:"-" }}</small></td>
+                                        <td class="text-nowrap"><small>{{ r.numero_factura|default:"-" }}</small></td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr><td colspan="8" class="text-center text-muted py-3">Todavía no hay compras de combustible registradas.</td></tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PESTAÑA MOVIMIENTOS -->
+    <div class="tab-pane fade" id="movimiento" role="tabpanel">
+        <div class="row g-4">
+            {% if is_admin %}
+            <div class="col-md-5">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-white">
+                        <h6 class="mb-1"><i class="fas fa-exchange-alt me-1 text-primary"></i>Registrar un movimiento</h6>
+                        <small class="text-muted">Al elegir un viaje, la unidad, el tipo y el lugar se completan automáticamente.</small>
+                    </div>
+                    <div class="card-body">
+                        <form method="POST">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="registrar_movimiento">
+                            
+                            <h6 class="text-primary mb-3">1. Elige el viaje o registra un movimiento independiente</h6>
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold" for="movimiento_viaje">Viaje (opcional)</label>
+                                <select name="id_viaje" id="movimiento_viaje" class="form-select">
+                                    <option value="">Sin asociar a un viaje</option>
+                                    {% for v in viajes_movimiento %}
+                                        <option value="{{ v.id_viaje }}"
+                                            data-unidad="{{ v.id_unidad }}"
+                                            data-estado="{{ v.id_estado_viaje }}"
+                                            data-origen="{{ v.id_origen }}"
+                                            data-destino="{{ v.id_destino }}"
+                                            {% if v.id_viaje|stringformat:"s" == viaje_preseleccionado %}selected{% endif %}>
+                                            {{ v.correlativo }} - {{ v.unidad_placa }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                                <div class="form-text">Al elegirlo, se completan la unidad, la salida o llegada y el lugar.</div>
+                            </div>
+                            <div class="row g-3">
+                                <div class="col-sm-6">
+                                    <label class="form-label fw-semibold" for="movimiento_unidad">Unidad</label>
+                                    <select name="id_unidad" id="movimiento_unidad" class="form-select" required>
+                                        <option value="">Selecciona una unidad...</option>
+                                        {% for u in unidades %}
+                                            <option value="{{ u.id_unidad }}" data-capacidad="{{ u.capacidad_tanque_gal|default:'' }}">{{ u.placa }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-sm-6">
+                                    <label class="form-label fw-semibold" for="movimiento_tipo">¿Qué ocurrió?</label>
+                                    <select name="tipo" id="movimiento_tipo" class="form-select" required>
+                                        <option value="SALIDA" {% if tipo_movimiento_preseleccionado == 'SALIDA' %}selected{% endif %}>La unidad salió</option>
+                                        <option value="ENTRADA" {% if tipo_movimiento_preseleccionado == 'ENTRADA' %}selected{% endif %}>La unidad llegó</option>
+                                    </select>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label fw-semibold" for="movimiento_ubicacion">Lugar</label>
+                                    <select name="id_ubicacion" id="movimiento_ubicacion" class="form-select" required>
+                                        <option value="">Selecciona un lugar...</option>
+                                        {% for ub in ubicaciones %}<option value="{{ ub.id_ubicacion }}">{{ ub.nombre }}</option>{% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <h6 class="text-primary mb-3 mt-4">2. Lecturas del tablero</h6>
+                            <div class="row g-3">
+                                <div class="col-sm-6">
+                                    <label class="form-label fw-semibold" for="movimiento_odometro">Odómetro (km)</label>
+                                    <input type="number" min="0" step="1" inputmode="numeric" name="odometro_km" id="movimiento_odometro" class="form-control">
+                                    <div class="form-text">Escribe el número que muestra el tablero.</div>
+                                </div>
+                                <div class="col-sm-6">
+                                    <label class="form-label fw-semibold" for="movimiento_combustible">Combustible en el tanque (galones)</label>
+                                    <input type="number" min="0" step="0.01" inputmode="decimal" name="combustible_gal" id="movimiento_combustible" class="form-control">
+                                    <div class="form-text" id="combustible_ayuda">Lee el indicador del tanque; es opcional si no está asociado a un viaje.</div>
+                                </div>
+                            </div>
+                            <div class="alert alert-info py-2 small d-none" id="capacidad_tanque_info"></div>
+                            <div class="form-text mt-3">La fecha y hora del movimiento se registrarán automáticamente al guardar.</div>
+                            <details class="mt-3 mb-3">
+                                <summary class="text-muted">Agregar una nota (opcional)</summary>
+                                <div class="mt-3">
+                                    <label class="form-label" for="movimiento_observacion">Novedades o daños</label>
+                                    <textarea id="movimiento_observacion" name="observacion" class="form-control" rows="2" maxlength="500" placeholder="Escribe cualquier información útil."></textarea>
+                                </div>
+                            </details>
+                            <button type="submit" class="btn btn-success w-100"><i class="fas fa-save me-1"></i>Guardar movimiento</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            
+            <div class="{% if is_admin %}col-md-7{% else %}col-md-12{% endif %}">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-white"><h6 class="mb-0"><i class="fas fa-history me-2 text-primary"></i>Salidas y llegadas registradas</h6></div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover table-sm align-middle">
+                                <thead class="table-light">
+                                    <tr><th>Fecha y hora</th><th>Unidad</th><th>Registro</th><th>Lugar</th><th>Lectura del odómetro</th><th>Notas</th></tr>
+                                </thead>
+                                <tbody>
+                                    {% for m in historial_movimientos %}
+                                    <tr>
+                                        <td><small>{{ m.fecha_hora|date:"d/m/Y H:i"|default:m.fecha_hora|default:"-" }}</small></td>
+                                        <td><strong>{{ m.unidad_placa }}</strong></td>
+                                        <td>
+                                            {% if m.tipo == 'SALIDA' %}
+                                                <span class="badge bg-warning text-dark">Salió</span>
+                                            {% else %}
+                                                <span class="badge bg-success">Llegó</span>
+                                            {% endif %}
+                                        </td>
+                                        <td><small>{{ m.ubicacion_nombre }}</small></td>
+                                        <td><small>{{ m.odometro_km|default:"-" }} km</small></td>
+                                        <td><small>{{ m.observacion|default:"-" }}</small></td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr><td colspan="6" class="text-center text-muted py-3">Todavía no hay salidas ni llegadas registradas.</td></tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const viajeSelect = document.getElementById('movimiento_viaje');
+    const unidadSelect = document.getElementById('movimiento_unidad');
+    const ubicacionSelect = document.getElementById('movimiento_ubicacion');
+    const tipoSelect = document.getElementById('movimiento_tipo');
+    const odometroInput = document.getElementById('movimiento_odometro');
+    const combustibleInput = document.getElementById('movimiento_combustible');
+    const combustibleAyuda = document.getElementById('combustible_ayuda');
+    const capacidadInfo = document.getElementById('capacidad_tanque_info');
+    const recargaViajeSelect = document.getElementById('recarga_viaje');
+    const recargaUnidadSelect = document.getElementById('recarga_unidad');
+    const recargaGalonesInput = document.getElementById('recarga_galones');
+    const recargaNivelInput = document.getElementById('recarga_nivel');
+    const recargaAyuda = document.getElementById('recarga_ayuda');
+    const recargaViajeAyuda = document.getElementById('recarga_viaje_ayuda');
+    if (!viajeSelect || !unidadSelect || !ubicacionSelect || !tipoSelect || !odometroInput || !combustibleInput) {
+        return;
+    }
+
+    function actualizarLimiteCombustible() {
+        const unidad = unidadSelect.options[unidadSelect.selectedIndex];
+        const capacidad = unidad && unidad.value ? Number(unidad.dataset.capacidad) : NaN;
+        const vinculado = Boolean(viajeSelect.value);
+        combustibleInput.required = vinculado;
+        combustibleInput.max = Number.isFinite(capacidad) && capacidad > 0 ? capacidad : '';
+        combustibleInput.setCustomValidity('');
+
+        if (Number.isFinite(capacidad) && capacidad > 0) {
+            capacidadInfo.textContent = 'Tanque de esta unidad: ' + capacidad + ' galones. Registra la cantidad que muestra el indicador, no la capacidad completa.';
+            capacidadInfo.classList.remove('d-none');
+            combustibleAyuda.textContent = vinculado
+                ? 'Obligatorio al salir y al llegar. Debe ser igual o menor a la capacidad del tanque.'
+                : 'Dato opcional si el movimiento no pertenece a un viaje.';
+        } else if (vinculado) {
+            capacidadInfo.textContent = 'Esta unidad no tiene registrada la capacidad del tanque. Actualízala en Unidades antes de iniciar o cerrar el viaje.';
+            capacidadInfo.classList.remove('d-none');
+            combustibleAyuda.textContent = 'No se puede registrar el combustible del viaje hasta registrar la capacidad del tanque.';
+            combustibleInput.setCustomValidity('Registra la capacidad del tanque en Unidades antes de iniciar o cerrar este viaje.');
+        } else {
+            capacidadInfo.classList.add('d-none');
+            combustibleAyuda.textContent = 'Dato opcional si el movimiento no pertenece a un viaje.';
+        }
+
+        if (
+            combustibleInput.value
+            && Number.isFinite(capacidad)
+            && capacidad > 0
+            && Number(combustibleInput.value) > capacidad
+        ) {
+            combustibleInput.setCustomValidity('La lectura no puede superar la capacidad del tanque (' + capacidad + ' galones).');
+        }
+    }
+
+    function sincronizarMovimiento() {
+        const viaje = viajeSelect.options[viajeSelect.selectedIndex];
+        const vinculado = Boolean(viaje && viaje.value);
+        const estado = vinculado ? viaje.dataset.estado : '';
+        const tipoPermitido = estado === '1' ? 'SALIDA' : estado === '2' ? 'ENTRADA' : '';
+
+        if (vinculado) {
+            unidadSelect.value = viaje.dataset.unidad;
+            tipoSelect.value = tipoPermitido;
+            ubicacionSelect.value = tipoPermitido === 'SALIDA' ? viaje.dataset.origen : viaje.dataset.destino;
+        }
+        Array.from(unidadSelect.options).forEach(function(option) {
+            option.disabled = vinculado && option.value !== viaje.dataset.unidad && option.value !== '';
+        });
+        Array.from(ubicacionSelect.options).forEach(function(option) {
+            const ubicacionPermitida = tipoSelect.value === 'SALIDA' ? viaje.dataset.origen : viaje.dataset.destino;
+            option.disabled = vinculado && option.value !== ubicacionPermitida && option.value !== '';
+        });
+        Array.from(tipoSelect.options).forEach(function(option) {
+            option.disabled = vinculado && option.value !== tipoPermitido && option.value !== '';
+        });
+
+        odometroInput.required = vinculado;
+        actualizarLimiteCombustible();
+    }
+
+    viajeSelect.addEventListener('change', sincronizarMovimiento);
+    unidadSelect.addEventListener('change', actualizarLimiteCombustible);
+    tipoSelect.addEventListener('change', sincronizarMovimiento);
+    combustibleInput.addEventListener('input', actualizarLimiteCombustible);
+    sincronizarMovimiento();
+
+    if (
+        recargaUnidadSelect
+        && recargaViajeSelect
+        && recargaGalonesInput
+        && recargaNivelInput
+        && recargaAyuda
+    ) {
+        function actualizarLimiteRecarga() {
+            const unidad = recargaUnidadSelect.options[recargaUnidadSelect.selectedIndex];
+            const capacidad = unidad && unidad.value ? Number(unidad.dataset.capacidad) : NaN;
+            const lectura = unidad && unidad.value && unidad.dataset.actual !== ''
+                ? Number(unidad.dataset.actual)
+                : NaN;
+            const viaje = recargaViajeSelect.options[recargaViajeSelect.selectedIndex];
+            recargaGalonesInput.max = Number.isFinite(capacidad) && capacidad > 0 ? capacidad : '';
+            recargaNivelInput.max = Number.isFinite(capacidad) && capacidad > 0 ? capacidad : '';
+            recargaGalonesInput.setCustomValidity('');
+            recargaNivelInput.setCustomValidity('');
+            if (Number.isFinite(capacidad) && capacidad > 0) {
+                const estadoLectura = Number.isFinite(lectura)
+                    ? ' Combustible registrado antes de esta carga: ' + lectura + ' gal.'
+                    : ' No hay una lectura previa; usa el indicador del tanque después de cargar.';
+                recargaAyuda.textContent = 'La capacidad del tanque es ' + capacidad + ' galones.' + estadoLectura;
+            } else {
+                recargaAyuda.textContent = 'Registra la capacidad del tanque en Unidades antes de guardar la recarga.';
+            }
+            if (viaje && viaje.value && viaje.dataset.unidad !== recargaUnidadSelect.value) {
+                recargaViajeSelect.setCustomValidity('El viaje debe corresponder a la unidad seleccionada.');
+            } else {
+                recargaViajeSelect.setCustomValidity('');
+            }
+            if (recargaUnidadSelect.value && (!Number.isFinite(capacidad) || capacidad <= 0)) {
+                recargaNivelInput.setCustomValidity('Registra primero la capacidad del tanque en Unidades.');
+            }
+            if (
+                recargaGalonesInput.value
+                && Number.isFinite(capacidad)
+                && capacidad > 0
+                && Number(recargaGalonesInput.value) > capacidad
+            ) {
+                recargaGalonesInput.setCustomValidity('Los galones comprados no pueden superar la capacidad total del tanque.');
+            }
+            if (
+                recargaNivelInput.value
+                && Number.isFinite(capacidad)
+                && capacidad > 0
+                && Number(recargaNivelInput.value) > capacidad
+            ) {
+                recargaNivelInput.setCustomValidity('El nivel final no puede superar la capacidad del tanque (' + capacidad + ' galones).');
+            }
+            if (
+                recargaNivelInput.value
+                && recargaGalonesInput.value
+                && Number(recargaNivelInput.value) < Number(recargaGalonesInput.value)
+            ) {
+                recargaNivelInput.setCustomValidity('El nivel final debe ser al menos igual a los galones comprados.');
+            }
+            if (viaje && viaje.value && viaje.dataset.estado === '2') {
+                recargaViajeAyuda.textContent = 'Esta unidad está en viaje: asocia la recarga al viaje para calcular correctamente su consumo.';
+            } else if (viaje && viaje.value) {
+                recargaViajeAyuda.textContent = 'La compra quedará registrada en este viaje y también actualizará el nivel actual de la unidad.';
+            } else {
+                recargaViajeAyuda.textContent = 'Para una carga previa al viaje, deja esta opción vacía.';
+            }
+        }
+
+        function actualizarViajesDeUnidad() {
+            Array.from(recargaViajeSelect.options).forEach(function(option) {
+                option.disabled = Boolean(
+                    option.value
+                    && option.dataset.unidad !== recargaUnidadSelect.value
+                );
+            });
+            const viaje = recargaViajeSelect.options[recargaViajeSelect.selectedIndex];
+            if (
+                viaje
+                && viaje.value
+                && viaje.dataset.unidad !== recargaUnidadSelect.value
+            ) {
+                recargaViajeSelect.value = '';
+            }
+            actualizarLimiteRecarga();
+        }
+
+        function seleccionarUnidadDelViaje() {
+            const viaje = recargaViajeSelect.options[recargaViajeSelect.selectedIndex];
+            if (viaje && viaje.value) {
+                recargaUnidadSelect.value = viaje.dataset.unidad;
+            }
+            actualizarViajesDeUnidad();
+        }
+
+        recargaUnidadSelect.addEventListener('change', actualizarViajesDeUnidad);
+        recargaViajeSelect.addEventListener('change', seleccionarUnidadDelViaje);
+        recargaGalonesInput.addEventListener('input', actualizarLimiteRecarga);
+        recargaNivelInput.addEventListener('input', actualizarLimiteRecarga);
+        actualizarViajesDeUnidad();
+    }
+
+    if (viajeSelect.value && window.bootstrap) {
+        bootstrap.Tab.getOrCreateInstance(document.getElementById('movimiento-tab')).show();
+    }
+});
+</script>
+{% endblock %}

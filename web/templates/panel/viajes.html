@@ -1,0 +1,1267 @@
+{% extends 'panel/base.html' %}
+{% block title %}Viajes{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<style>
+    #routePreviewMap {
+        height: 250px;
+        width: 100%;
+        background: #f3f6f8;
+        z-index: 1;
+    }
+
+    .route-preview-card .card-body {
+        padding: 0;
+    }
+
+    .route-preview-card .route-preview-header {
+        background-color: #eaf3fb !important;
+        border-bottom-color: #d5e8f7;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<style>
+    .viajes-layout .card {
+        border-radius: .75rem;
+        overflow: hidden;
+    }
+
+    .viajes-layout .card-header {
+        min-height: 3.25rem;
+        padding: .85rem 1rem;
+        border-bottom: 1px solid #eef0f2;
+    }
+
+    .viajes-layout .card-body {
+        padding: 1rem;
+    }
+
+    #viajeForm .form-label {
+        margin-bottom: .35rem;
+    }
+
+    #viajeForm .mb-2 {
+        margin-bottom: .85rem !important;
+    }
+
+    #viajeForm .row {
+        --bs-gutter-x: .75rem;
+    }
+
+    #viajeForm .form-control,
+    #viajeForm .form-select {
+        min-height: 2.25rem;
+    }
+
+    #viajeForm textarea.form-control {
+        min-height: auto;
+    }
+
+    .viajes-table-search {
+        max-width: 22rem;
+    }
+
+    .viajes-table {
+        margin-bottom: 0;
+        font-size: .875rem;
+    }
+
+    .viajes-table thead th {
+        padding: .7rem .65rem;
+        white-space: nowrap;
+        color: #495057;
+        font-size: .75rem;
+        text-transform: uppercase;
+        letter-spacing: .025em;
+    }
+
+    .viajes-table tbody td {
+        padding: .7rem .65rem;
+    }
+
+    .viajes-table-principal {
+        min-width: 900px;
+    }
+
+    .viajes-table-resumen {
+        min-width: 680px;
+    }
+
+    .viajes-table-principal th.viajes-actions,
+    .viajes-table-principal td.viajes-actions {
+        min-width: 170px;
+        background-color: #f4f8ff;
+    }
+
+    .viajes-table-principal .viajes-action-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .4rem;
+    }
+
+    .viajes-table-principal .viajes-action-buttons form {
+        display: inline-flex;
+        margin: 0;
+    }
+
+    .viajes-table-principal .viajes-action-buttons .btn {
+        white-space: nowrap;
+    }
+
+    @media (max-width: 575.98px) {
+        .viajes-layout .card-body {
+            padding: .75rem;
+        }
+
+        .viajes-layout .card-header {
+            padding: .75rem;
+        }
+
+        .viajes-table-search {
+            max-width: none;
+        }
+    }
+</style>
+<div class="row mb-4">
+    <div class="col-12">
+        <h2 class="fw-bold"><i class="fas fa-route me-2 text-primary"></i>Gestión de Viajes</h2>
+        <p class="text-muted">Programa y administra viajes; registra sus salidas y llegadas desde Control</p>
+    </div>
+</div>
+
+<div class="row g-4 viajes-layout">
+    {% if is_admin %}
+    <!-- FORMULARIO -->
+    <div class="col-md-5">
+        <div class="card border-0 shadow-sm viaje-form-card">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h6 class="mb-0" id="formTitle">
+                    <i class="fas fa-plus-circle me-1 text-primary"></i>Registrar Nuevo Viaje
+                </h6>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="resetForm()" style="display:none;" id="btnCancel">
+                    <i class="fas fa-times"></i> Cancelar
+                </button>
+            </div>
+            <div class="card-body">
+                <form method="POST" id="viajeForm">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" id="formAction" value="create">
+                    <input type="hidden" name="id_viaje" id="formId">
+                    
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">Correlativo del Viaje</label>
+                        <input type="text" name="correlativo" id="f_correlativo" class="form-control form-control-sm" required placeholder="Ej: V-2026-001">
+                    </div>
+                    
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">Unidad (Incluye Conductor Asignado)</label>
+                        <select name="id_unidad" id="f_unidad" class="form-select form-select-sm" required>
+                            <option value="">Seleccione una unidad...</option>
+                            {% for u in unidades %}
+                                <option value="{{ u.id_unidad }}"
+                                    data-viaje-activo="{{ u.tiene_viaje_activo|yesno:'true,false' }}"
+                                    {% if u.tiene_viaje_activo %}disabled hidden{% endif %}>
+                                    {{ u.placa }} - {{ u.tipo_nombre|default:'Sin tipo' }}
+                                    {% if u.tiene_viaje_activo %}(ya tiene un viaje programado o en curso){% endif %}
+                                    {% if u.ultima_lectura_combustible_gal != None %}
+                                        | Combustible registrado: {{ u.ultima_lectura_combustible_gal }} gal
+                                        {% if u.ultima_lectura_combustible_gal <= 0 %} (sin combustible){% endif %}
+                                    {% else %}
+                                        | Combustible sin registrar
+                                    {% endif %}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted"><i class="fas fa-info-circle"></i> Puedes programar el viaje y cargar combustible desde Control → Cargar combustible. Una unidad sin lectura positiva no podrá salir.</small>
+                    </div>
+                    
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">Cliente</label>
+                        <select name="id_cliente" id="f_cliente" class="form-select form-select-sm">
+                            <option value="">-- Sin cliente --</option>
+                            {% for c in clientes %}
+                                <option value="{{ c.id_cliente }}">{{ c.nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-12 col-md-6 mb-2">
+                            <label class="form-label small fw-bold text-success" for="f_origen">
+                                <i class="fas fa-map-marker-alt"></i> Departamento de salida
+                            </label>
+                            <select id="f_origen_departamento" class="form-select form-select-sm mb-2" required>
+                                <option value="">Seleccione un departamento...</option>
+                                {% for departamento in departamentos_ubicaciones %}
+                                    <option value="{{ departamento }}">{{ departamento }}</option>
+                                {% endfor %}
+                            </select>
+                            <label class="form-label small fw-bold text-success" for="f_origen">
+                                Municipio / punto de salida
+                            </label>
+                            <select name="id_origen" id="f_origen" class="form-select form-select-sm" required disabled>
+                                <option value="">Primero seleccione el departamento...</option>
+                                {% for ub in ubicaciones %}
+                                    <option value="{{ ub.id_ubicacion }}"
+                                        data-lat="{{ ub.latitud|default:'' }}"
+                                        data-lng="{{ ub.longitud|default:'' }}"
+                                        data-departamento="{{ ub.departamento|default:'' }}">
+                                        {{ ub.nombre }}{% if ub.departamento %} — {{ ub.departamento }}{% endif %}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-6 mb-2">
+                            <label class="form-label small fw-bold text-danger" for="f_destino_departamento">
+                                <i class="fas fa-flag-checkered"></i> Departamento de llegada
+                            </label>
+                            <select id="f_destino_departamento" class="form-select form-select-sm mb-2" required>
+                                <option value="">Seleccione un departamento...</option>
+                                {% for departamento in departamentos_ubicaciones %}
+                                    <option value="{{ departamento }}">{{ departamento }}</option>
+                                {% endfor %}
+                            </select>
+                            <label class="form-label small fw-bold text-danger" for="f_destino">
+                                Municipio / punto de llegada
+                            </label>
+                            <select name="id_destino" id="f_destino" class="form-select form-select-sm" required disabled>
+                                <option value="">Primero seleccione el departamento...</option>
+                                {% for ub in ubicaciones %}
+                                    <option value="{{ ub.id_ubicacion }}"
+                                        data-lat="{{ ub.latitud|default:'' }}"
+                                        data-lng="{{ ub.longitud|default:'' }}"
+                                        data-departamento="{{ ub.departamento|default:'' }}">
+                                        {{ ub.nombre }}{% if ub.departamento %} — {{ ub.departamento }}{% endif %}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="card border route-preview-card mb-2">
+                        <div class="card-header route-preview-header py-2">
+                            <div class="d-flex justify-content-between align-items-center gap-2">
+                                <small class="fw-bold"><i class="fas fa-map-marked-alt me-1 text-primary"></i>Ruta por carretera</small>
+                                <span class="badge bg-secondary" id="routeDistance">Seleccione origen y destino</span>
+                            </div>
+                            <small class="text-muted d-block mt-1" id="routeStatus">
+                                Vista previa de ruta; no representa una posición GPS en vivo.
+                            </small>
+                        </div>
+                        <div class="card-body">
+                            <div id="routePreviewMap" role="img" aria-label="Vista previa de la ruta entre origen y destino"></div>
+                        </div>
+                        <div class="card-footer bg-white py-2">
+                            <small class="text-muted"><i class="fas fa-info-circle me-1"></i>Primero elige el departamento y luego un punto registrado. El GPS simulado se consulta en Seguimiento GPS.</small>
+                        </div>
+                    </div>
+                    <input type="hidden" name="distancia_km" id="f_distancia_km">
+                    <input type="hidden" name="polyline_ruta" id="f_polyline_ruta">
+                    
+                    <div class="row">
+                        <div class="col-12 col-md-6 mb-2">
+                            <label class="form-label small fw-bold text-primary">
+                                <i class="fas fa-calendar-alt"></i> Fecha Programada
+                            </label>
+                            <input type="datetime-local" name="fecha_salida" id="f_salida" class="form-control form-control-sm" required>
+                        </div>
+                        <div class="col-12 col-md-6 mb-2">
+                            <label class="form-label small fw-bold">
+                                <i class="fas fa-clock"></i> Llegada Estimada
+                            </label>
+                            <input type="datetime-local" name="fecha_llegada_est" id="f_llegada" class="form-control form-control-sm" readonly aria-describedby="etaHelp">
+                            <small class="text-muted" id="etaHelp">Se calcula con la duración por carretera y la fecha programada.</small>
+                        </div>
+                    </div>
+                    
+                    <!-- CARGAS A TRANSPORTAR -->
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">
+                            <i class="fas fa-boxes"></i> Cargas a Transportar
+                        </label>
+                        
+                        <!-- Cargas Disponibles -->
+                        <div class="border rounded p-2 mb-2" style="max-height: 150px; overflow-y: auto; background-color: #f8f9fa; cursor: default;">
+                            <small class="text-muted fw-bold d-block mb-2">
+                                <i class="fas fa-check-circle text-success"></i> Cargas Disponibles (marcar para agregar):
+                            </small>
+                            <div id="cargasDisponiblesContainer">
+                                {% for carga in cargas_disponibles %}
+                                <div class="form-check">
+                                    <input class="form-check-input carga-disponible-check" type="checkbox" name="cargas" value="{{ carga.id_carga }}" id="disp_carga_{{ carga.id_carga }}">
+                                    <label class="form-check-label small" for="disp_carga_{{ carga.id_carga }}" style="cursor: pointer;">
+                                        {{ carga.descripcion }} ({{ carga.peso_ton }} ton)
+                                    </label>
+                                </div>
+                                {% empty %}
+                                    <small class="text-muted d-block">No hay cargas disponibles</small>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        
+                        <!-- Cargas Ya Asignadas a este viaje (solo al editar) -->
+                        <div class="border rounded p-2" id="cargasAsignadasSection" style="display:none; max-height: 150px; overflow-y: auto; background-color: #fff3cd;">
+                            <small class="text-warning fw-bold d-block mb-2">
+                                <i class="fas fa-exclamation-triangle"></i> Cargas Asignadas a este viaje (desmarcar para quitar):
+                            </small>
+                            <div id="cargasAsignadasContainer">
+                                <!-- Se llena dinámicamente con JavaScript -->
+                            </div>
+                            <small class="text-muted d-block mt-2">
+                                <i class="fas fa-info-circle"></i> Desmarca las cargas que quieras liberar de este viaje
+                            </small>
+                        </div>
+                        
+                        <small class="text-muted">
+                            <i class="fas fa-info-circle"></i> Solo se muestran cargas sin viaje asignado
+                        </small>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary btn-sm w-100" id="btnSubmit">
+                        <i class="fas fa-save me-1"></i>Guardar Viaje
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- TABLA DE CONSULTA -->
+    <div class="{% if is_admin %}col-md-7{% else %}col-md-12{% endif %}">
+        <div class="card border-0 shadow-sm viajes-table-card">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h6 class="mb-0"><i class="fas fa-list me-2 text-primary"></i>Viajes Programados</h6>
+                <span class="badge bg-primary">Programados</span>
+            </div>
+            <div class="card-body">
+                <div class="mb-3 viajes-table-search">
+                    <input type="search" class="form-control form-control-sm table-search-input" placeholder="Buscar por unidad o conductor..." aria-label="Buscar por unidad o conductor en viajes programados">
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm align-middle viajes-table viajes-table-principal">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Correlativo</th>
+                                <th>Ruta</th>
+                                <th>Fecha Programada</th>
+                                <th>Unidad</th>
+                                <th>Conductor</th>
+                                <th>Cliente</th>
+                                <th>Cargas</th>
+                                <th>Km Recorridos</th>
+                                <th>Combustible</th>
+                                <th>Rendimiento</th>
+                                <th>Costo</th>
+                                <th>Estado</th>
+                                <th class="viajes-actions">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for v in viajes %}
+                            {% if v.id_estado_viaje == 1 %}
+                            <tr 
+                                data-id="{{ v.id_viaje }}"
+                                data-correlativo="{{ v.correlativo }}"
+                                data-unidad="{{ v.id_unidad }}"
+                                data-conductor="{{ v.id_conductor|default:'' }}"
+                                data-cliente="{{ v.id_cliente|default:'' }}"
+                                data-origen="{{ v.id_origen }}"
+                                data-destino="{{ v.id_destino }}"
+                                data-estado="{{ v.id_estado_viaje }}"
+                                data-fecha-salida="{{ v.fecha_salida|default:'' }}"
+                                data-fecha-llegada="{{ v.fecha_llegada_est|default:'' }}">
+                                <td><strong>{{ v.correlativo }}</strong></td>
+                                <td>
+                                    <small>
+                                        <span class="text-success"><i class="fas fa-circle" style="font-size: 8px;"></i> {{ v.origen_nombre }}</span>
+                                        <br>
+                                        <span class="text-danger"><i class="fas fa-circle" style="font-size: 8px;"></i> {{ v.destino_nombre }}</span>
+                                    </small>
+                                </td>
+                                <td>
+                                    <small>
+                                        <i class="fas fa-calendar-day text-primary"></i> {{ v.fecha_salida|default:"-" }}
+                                    </small>
+                                </td>
+                                <td><small>{{ v.unidad_placa|default:"-" }}</small></td>
+                                <td><small>{{ v.conductor_nombre|default:"Sin asignar" }}</small></td>
+                                <td><small>{{ v.cliente_nombre|default:"-" }}</small></td>
+                                <td>
+                                    {% if v.total_cargas > 0 %}
+                                        <span class="badge bg-info">{{ v.total_cargas }} carga(s)</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Sin cargas</span>
+                                    {% endif %}
+                                </td>
+                                <td><small>{{ v.km_recorridos|default:"-" }} km</small></td>
+                                <td>
+                                    {% if v.galones_consumidos %}
+                                        <span class="badge bg-info">{{ v.galones_consumidos }} gal</span>
+                                    {% else %}
+                                        <small>-</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if v.rendimiento_km_gal %}
+                                        <small>{{ v.rendimiento_km_gal }} km/gal</small>
+                                    {% else %}
+                                        <small>-</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if v.costo_combustible %}
+                                        <strong>${{ v.costo_combustible }}</strong>
+                                    {% else %}
+                                        <small>-</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if v.id_estado_viaje == 1 %}
+                                        <span class="badge bg-info">Programado</span>
+                                    {% elif v.id_estado_viaje == 2 %}
+                                        <span class="badge bg-primary">Viaje en Curso</span>
+                                    {% elif v.id_estado_viaje == 3 %}
+                                        <span class="badge bg-success">Viaje finalizado</span>
+                                    {% elif v.id_estado_viaje == 4 %}
+                                        <span class="badge bg-danger">Cancelado</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">-</span>
+                                    {% endif %}
+                                </td>
+                                <td class="viajes-actions">
+                                    {% if is_admin %}
+                                        {% if v.id_estado_viaje == 1 %}
+                                            <div class="viajes-action-buttons">
+                                                <button class="btn btn-sm btn-info text-white btn-editar" title="Editar viaje">
+                                                    <i class="fas fa-edit me-1"></i>Editar
+                                                </button>
+                                                <a href="{% url 'panel:control' %}?viaje={{ v.id_viaje }}&amp;tipo=SALIDA" class="btn btn-sm btn-primary {% if v.total_cargas == 0 %}disabled{% endif %}" title="{% if v.total_cargas > 0 %}Registrar salida en Control{% else %}Asigna cargas antes de iniciar{% endif %}" {% if v.total_cargas == 0 %}aria-disabled="true"{% endif %}>
+                                                    <i class="fas fa-play me-1"></i>Iniciar
+                                                </a>
+                                                <form method="POST" class="cancel-viaje-form">
+                                                    {% csrf_token %}
+                                                    <input type="hidden" name="action" value="cancelar">
+                                                    <input type="hidden" name="id_viaje" value="{{ v.id_viaje }}">
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Cancelar viaje programado">
+                                                        <i class="fas fa-ban me-1"></i>Cancelar
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        {% elif v.id_estado_viaje == 2 %}
+                                            <button class="btn btn-sm btn-info text-white btn-editar" title="Editar viaje" disabled aria-disabled="true">
+                                                <i class="fas fa-edit me-1"></i>Editar
+                                            </button>
+                                            <a href="{% url 'panel:control' %}?viaje={{ v.id_viaje }}&amp;tipo=ENTRADA" class="btn btn-sm btn-success" title="Registrar llegada en Control">
+                                                <i class="fas fa-check me-1"></i>Completar
+                                            </a>
+                                        {% elif v.id_estado_viaje == 3 %}
+                                            <span class="text-muted small">-</span>
+                                        {% endif %}
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endif %}
+                            {% empty %}
+                            <tr>
+                                <td colspan="13" class="text-center text-muted py-4">
+                                    <i class="fas fa-route fa-2x mb-2 d-block"></i>
+                                    No hay viajes programados
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="card border-0 shadow-sm mt-3 viajes-table-card">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h6 class="mb-0"><i class="fas fa-truck me-2 text-primary"></i>Viajes en Curso</h6>
+                <span class="badge bg-primary">En curso</span>
+            </div>
+            <div class="card-body">
+                <div class="mb-3 viajes-table-search">
+                    <input type="search" class="form-control form-control-sm table-search-input" placeholder="Buscar por unidad o conductor..." aria-label="Buscar por unidad o conductor en viajes en curso">
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm align-middle mb-0 viajes-table viajes-table-resumen">
+                        <thead class="table-light">
+                            <tr><th>Correlativo</th><th>Ruta</th><th>Fecha Programada</th><th>Unidad</th><th>Conductor</th><th>Cliente</th><th>Km Recorridos</th><th>Combustible</th><th>Rendimiento</th><th>Costo</th>{% if is_admin %}<th>Acciones</th>{% endif %}</tr>
+                        </thead>
+                        <tbody>
+                            {% for v in viajes %}
+                                {% if v.id_estado_viaje == 2 %}
+                                <tr>
+                                    <td><strong>{{ v.correlativo }}</strong></td>
+                                    <td><small>{{ v.origen_nombre }} <i class="fas fa-arrow-right text-muted"></i> {{ v.destino_nombre }}</small></td>
+                                    <td><small>{{ v.fecha_salida|default:"-" }}</small></td>
+                                    <td><small>{{ v.unidad_placa|default:"-" }}</small></td>
+                                    <td><small>{{ v.conductor_nombre|default:"Sin asignar" }}</small></td>
+                                    <td><small>{{ v.cliente_nombre|default:"-" }}</small></td>
+                                    <td><small>{{ v.km_recorridos|default:"-" }} km</small></td>
+                                    <td>{% if v.galones_consumidos %}<span class="badge bg-info">{{ v.galones_consumidos }} gal</span>{% else %}<small>-</small>{% endif %}</td>
+                                    <td>{% if v.rendimiento_km_gal %}<small>{{ v.rendimiento_km_gal }} km/gal</small>{% else %}<small>-</small>{% endif %}</td>
+                                    <td>{% if v.costo_combustible %}<strong>${{ v.costo_combustible }}</strong>{% else %}<small>-</small>{% endif %}</td>
+                                    {% if is_admin %}
+                                    <td>
+                                        <a href="{% url 'panel:control' %}?viaje={{ v.id_viaje }}&amp;tipo=ENTRADA" class="btn btn-sm btn-success" title="Registrar llegada en Control">
+                                            <i class="fas fa-check me-1"></i>Completar
+                                        </a>
+                                    </td>
+                                    {% endif %}
+                                </tr>
+                                {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="card border-0 shadow-sm mt-3 viajes-table-card">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h6 class="mb-0"><i class="fas fa-check-circle me-2 text-success"></i>Viajes Finalizados</h6>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-success">Finalizados</span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="toggleViajesFinalizados" aria-expanded="false" aria-controls="viajesFinalizadosContenido">
+                        <i class="fas fa-eye me-1"></i>Mostrar
+                    </button>
+                </div>
+            </div>
+            <div class="card-body" id="viajesFinalizadosContenido" style="display:none;">
+                <div class="mb-3 viajes-table-search">
+                    <input type="search" class="form-control form-control-sm table-search-input" placeholder="Buscar por unidad o conductor..." aria-label="Buscar por unidad o conductor en viajes finalizados">
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm align-middle mb-0 viajes-table viajes-table-resumen">
+                        <thead class="table-light">
+                            <tr><th>Correlativo</th><th>Ruta</th><th>Fecha Programada</th><th>Unidad</th><th>Conductor</th><th>Cliente</th><th>Km Recorridos</th><th>Combustible</th><th>Rendimiento</th><th>Costo</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for v in viajes|dictsortreversed:"fecha_salida" %}
+                                {% if v.id_estado_viaje == 3 %}
+                                <tr>
+                                    <td><strong>{{ v.correlativo }}</strong></td>
+                                    <td><small>{{ v.origen_nombre }} <i class="fas fa-arrow-right text-muted"></i> {{ v.destino_nombre }}</small></td>
+                                    <td><small>{{ v.fecha_salida|default:"-" }}</small></td>
+                                    <td><small>{{ v.unidad_placa|default:"-" }}</small></td>
+                                    <td><small>{{ v.conductor_nombre|default:"Sin asignar" }}</small></td>
+                                    <td><small>{{ v.cliente_nombre|default:"-" }}</small></td>
+                                    <td><small>{{ v.km_recorridos|default:"-" }} km</small></td>
+                                    <td>{% if v.galones_consumidos %}<span class="badge bg-info">{{ v.galones_consumidos }} gal</span>{% else %}<small>-</small>{% endif %}</td>
+                                    <td>{% if v.rendimiento_km_gal %}<small>{{ v.rendimiento_km_gal }} km/gal</small>{% else %}<small>-</small>{% endif %}</td>
+                                    <td>{% if v.costo_combustible %}<strong>${{ v.costo_combustible }}</strong>{% else %}<small>-</small>{% endif %}</td>
+                                </tr>
+                                {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="application/json" id="tipos-unidad-data">
+[
+    {% for tu in tipos_unidad %}
+    {
+        "id_tipo_unidad": {{ tu.id_tipo_unidad|default:0 }},
+        "nombre": "{{ tu.nombre|default:''|escapejs }}"
+    }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+]
+</script>
+
+<script type="application/json" id="unidades-data">
+[
+    {% for u in unidades %}
+    {
+        "id_unidad": {{ u.id_unidad|default:0 }},
+        "placa": "{{ u.placa|default:''|escapejs }}",
+        "id_tipo_unidad": {{ u.id_tipo_unidad|default:0 }},
+        "capacidad_ton": "{{ u.capacidad_ton|default:'0'|escapejs }}"
+    }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+]
+</script>
+
+<script type="application/json" id="todas-cargas-data">
+[
+    {% for carga in todas_cargas %}
+    {
+        "id_carga": {{ carga.id_carga|default:0 }},
+        "id_viaje": "{{ carga.id_viaje|default:''|escapejs }}",
+        "id_cliente": "{{ carga.id_cliente|default:''|escapejs }}",
+        "descripcion": "{{ carga.descripcion|default:''|escapejs }}",
+        "peso_ton": "{{ carga.peso_ton|default:''|escapejs }}",
+        "unidades_compatibles": "{{ carga.unidades_compatibles|default:''|escapejs }}",
+        "tipo_carga_nombre": "{{ carga.tipo_carga_nombre|default:''|escapejs }}"
+    }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+]
+</script>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+const todasCargasData = JSON.parse(document.getElementById('todas-cargas-data').textContent || '[]');
+const unidadesData = JSON.parse(document.getElementById('unidades-data').textContent || '[]');
+const routingApiUrl = '{{ routing_api_url|escapejs }}'.replace(/\/$/, '');
+const routeMapElement = document.getElementById('routePreviewMap');
+const routePreviewMap = window.L && routeMapElement ? L.map(routeMapElement).setView([13.7942, -88.8965], 8) : null;
+if (routePreviewMap) {
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+        attribution: '&copy; Esri · Datos © OpenStreetMap contributors',
+        maxZoom: 19
+    }).addTo(routePreviewMap);
+}
+const routePreviewLayer = routePreviewMap ? L.layerGroup().addTo(routePreviewMap) : null;
+const routeDistance = document.getElementById('routeDistance');
+const routeStatus = document.getElementById('routeStatus');
+const routeDistanceInput = document.getElementById('f_distancia_km');
+const routePolylineInput = document.getElementById('f_polyline_ruta');
+let routeRequestNumber = 0;
+let routeRequestPending = false;
+let routePromise = Promise.resolve();
+let submitAfterRoute = false;
+let routeDurationSeconds = null;
+
+function updateEstimatedArrival() {
+    const departureInput = document.getElementById('f_salida');
+    const arrivalInput = document.getElementById('f_llegada');
+    const etaHelp = document.getElementById('etaHelp');
+    if (!departureInput || !arrivalInput || !etaHelp) return;
+
+    const departure = departureInput.value ? new Date(departureInput.value) : null;
+    if (routeDurationSeconds === null || !departure || Number.isNaN(departure.getTime())) {
+        arrivalInput.value = '';
+        etaHelp.textContent = routeDurationSeconds
+            ? 'Indica la fecha y hora programadas para calcular la llegada.'
+            : 'La llegada se calculará cuando se obtenga una ruta vial.';
+        return;
+    }
+
+    const arrival = new Date(departure.getTime() + routeDurationSeconds * 1000);
+    const pad = value => String(value).padStart(2, '0');
+    arrivalInput.value = [
+        arrival.getFullYear(),
+        pad(arrival.getMonth() + 1),
+        pad(arrival.getDate())
+    ].join('-') + 'T' + pad(arrival.getHours()) + ':' + pad(arrival.getMinutes());
+    arrivalInput.min = departureInput.value;
+    etaHelp.textContent = 'Calculada según la ruta vial y la fecha programada; puede variar por tráfico y paradas.';
+}
+
+function decodeRoutePolyline(encoded) {
+    const points = [];
+    let index = 0;
+    let latitude = 0;
+    let longitude = 0;
+    while (index < encoded.length) {
+        let result = 0;
+        let shift = 0;
+        let byte;
+        do {
+            byte = encoded.charCodeAt(index++) - 63;
+            result |= (byte & 0x1f) << shift;
+            shift += 5;
+        } while (byte >= 0x20 && index < encoded.length);
+        latitude += (result & 1) ? ~(result >> 1) : (result >> 1);
+        result = 0;
+        shift = 0;
+        do {
+            byte = encoded.charCodeAt(index++) - 63;
+            result |= (byte & 0x1f) << shift;
+            shift += 5;
+        } while (byte >= 0x20 && index < encoded.length);
+        longitude += (result & 1) ? ~(result >> 1) : (result >> 1);
+        points.push([latitude / 100000, longitude / 100000]);
+    }
+    return points;
+}
+
+function filterLocationOptions(prefix, selectedId) {
+    const departmentSelect = document.getElementById(prefix + '_departamento');
+    const locationSelect = document.getElementById(prefix);
+    if (!departmentSelect || !locationSelect) return;
+
+    const department = departmentSelect.value;
+    const placeholder = locationSelect.options[0];
+    placeholder.textContent = department
+        ? 'Seleccione municipio o punto...'
+        : 'Primero seleccione el departamento...';
+    locationSelect.value = '';
+
+    let visibleLocations = 0;
+    Array.from(locationSelect.options).slice(1).forEach(option => {
+        const matchesDepartment = department && option.dataset.departamento === department;
+        option.hidden = !matchesDepartment;
+        option.disabled = !matchesDepartment;
+        if (matchesDepartment) visibleLocations += 1;
+    });
+
+    locationSelect.disabled = !department || visibleLocations === 0;
+    if (selectedId && Array.from(locationSelect.options).some(option =>
+        option.value === String(selectedId)
+        && option.dataset.departamento === department
+    )) {
+        locationSelect.value = String(selectedId);
+    }
+
+    if (department && visibleLocations === 0) {
+        placeholder.textContent = 'No hay puntos registrados en este departamento';
+    }
+}
+
+function setLocationSelection(prefix, locationId) {
+    const locationSelect = document.getElementById(prefix);
+    const selectedOption = Array.from(locationSelect.options).find(
+        option => option.value === String(locationId)
+    );
+    if (!selectedOption) {
+        document.getElementById(prefix + '_departamento').value = '';
+        filterLocationOptions(prefix);
+        return;
+    }
+
+    document.getElementById(prefix + '_departamento').value =
+        selectedOption.dataset.departamento;
+    filterLocationOptions(prefix, locationId);
+}
+
+function selectedLocation(select) {
+    const option = select.options[select.selectedIndex];
+    if (!option || !option.value) return null;
+    if (!option.dataset.lat || !option.dataset.lng) {
+        return { id: option.value, name: option.textContent.trim(), coordinates: null };
+    }
+    const lat = Number(option.dataset.lat);
+    const lng = Number(option.dataset.lng);
+    return {
+        id: option.value,
+        name: option.textContent.trim(),
+        coordinates: Number.isFinite(lat) && Number.isFinite(lng) ? [lat, lng] : null
+    };
+}
+
+async function updateRoutePreview() {
+    if (!routeDistance || !routeStatus) return;
+    if (!routePreviewMap || !routePreviewLayer) {
+        routeDistance.textContent = 'Mapa no disponible';
+        routeDistance.className = 'badge bg-warning text-dark';
+        routeStatus.textContent = 'No se pudo cargar el componente del mapa. Puedes guardar el viaje y verificar la ruta en Seguimiento GPS.';
+        return;
+    }
+
+    const requestNumber = ++routeRequestNumber;
+    const origen = selectedLocation(document.getElementById('f_origen'));
+    const destino = selectedLocation(document.getElementById('f_destino'));
+    routePreviewLayer.clearLayers();
+    routeDistanceInput.value = '';
+    routePolylineInput.value = '';
+    routeDurationSeconds = null;
+    updateEstimatedArrival();
+    routeRequestPending = false;
+    routeDistance.className = 'badge bg-secondary';
+
+    if (!origen || !destino) {
+        routeDistance.textContent = 'Seleccione origen y destino';
+        routeStatus.textContent = 'Seleccione ubicaciones con coordenadas registradas para calcular la ruta.';
+        return;
+    }
+
+    if (origen.id === destino.id) {
+        routeDistance.textContent = 'Ruta no válida';
+        routeStatus.textContent = 'El origen y el destino deben ser diferentes.';
+        return;
+    }
+
+    if (!origen.coordinates || !destino.coordinates) {
+        routeDistance.textContent = 'Faltan coordenadas';
+        routeDistance.className = 'badge bg-warning text-dark';
+        routeStatus.textContent = 'Verifica que los registros de origen y destino tengan latitud y longitud en Ubicaciones.';
+        return;
+    }
+
+    const points = [origen.coordinates, destino.coordinates];
+    L.circleMarker(points[0], { radius: 7, color: '#1479cf', fillColor: '#1479cf', fillOpacity: 1 })
+        .bindPopup('Salida: ' + origen.name).addTo(routePreviewLayer);
+    L.circleMarker(points[1], { radius: 8, color: '#b84235', fillColor: '#e65d4f', fillOpacity: 1 })
+        .bindPopup('Destino: ' + destino.name).addTo(routePreviewLayer);
+    L.polyline(points, { color: '#7b8794', weight: 3, dashArray: '7 7' }).addTo(routePreviewLayer);
+    routePreviewMap.fitBounds(L.latLngBounds(points).pad(0.15), { maxZoom: 12 });
+    routeDistance.textContent = 'Calculando ruta...';
+    routeStatus.textContent = 'Consultando trayecto por carretera. Esto no es seguimiento GPS en vivo.';
+    routeRequestPending = true;
+    routePromise = (async function() {
+        try {
+            const coordinates = points.map(point => point[1] + ',' + point[0]).join(';');
+            const response = await fetch(
+                routingApiUrl + '/route/v1/driving/' + coordinates + '?overview=full&geometries=polyline'
+            );
+            const routeData = await response.json();
+            const route = routeData.routes && routeData.routes[0];
+            if (
+                !response.ok
+                || !route
+                || !Number.isFinite(route.duration)
+                || route.duration <= 0
+                || !Number.isFinite(route.distance)
+                || requestNumber !== routeRequestNumber
+            ) {
+                throw new Error('No hay una ruta vial disponible para esas ubicaciones.');
+            }
+
+            const routePoints = decodeRoutePolyline(route.geometry);
+            if (routePoints.length < 2) {
+                throw new Error('El servicio devolvió una ruta incompleta.');
+            }
+
+            routePreviewLayer.clearLayers();
+            L.circleMarker(points[0], { radius: 7, color: '#1479cf', fillColor: '#1479cf', fillOpacity: 1 })
+                .bindPopup('Salida: ' + origen.name).addTo(routePreviewLayer);
+            L.circleMarker(points[1], { radius: 8, color: '#b84235', fillColor: '#e65d4f', fillOpacity: 1 })
+                .bindPopup('Destino: ' + destino.name).addTo(routePreviewLayer);
+            L.polyline(routePoints, { color: '#1769aa', weight: 5, opacity: 0.85 }).addTo(routePreviewLayer);
+            routePreviewMap.fitBounds(L.latLngBounds(routePoints).pad(0.15), { maxZoom: 12 });
+
+            const distanceKm = route.distance / 1000;
+            const durationMinutes = Math.round(route.duration / 60);
+            routeDurationSeconds = route.duration;
+            routeDistance.textContent = distanceKm.toFixed(1) + ' km';
+            routeDistance.className = 'badge bg-primary';
+            routeStatus.textContent = 'Duración vial estimada: ' + durationMinutes + ' min · Ruta calculada con OSRM.';
+            routeDistanceInput.value = distanceKm.toFixed(2);
+            routePolylineInput.value = route.geometry;
+            updateEstimatedArrival();
+        } catch (error) {
+            if (requestNumber !== routeRequestNumber) return;
+            routeDistance.textContent = 'Distancia no disponible';
+            routeDistance.className = 'badge bg-warning text-dark';
+            routeStatus.textContent = error.message + ' Se muestra solo una línea de referencia; no se guardará como ruta vial.';
+            routeDurationSeconds = null;
+            updateEstimatedArrival();
+        } finally {
+            if (requestNumber === routeRequestNumber) routeRequestPending = false;
+        }
+    })();
+    await routePromise;
+}
+
+function cargaCompatibleConUnidad(carga, unidad) {
+    if (!unidad) return true;
+    let compatibles = carga.unidades_compatibles;
+    if (compatibles === null || compatibles === undefined || String(compatibles).trim() === '' || String(compatibles).toLowerCase() === 'null') return true;
+    if (Array.isArray(compatibles)) {
+        compatibles = compatibles.map(String);
+    } else {
+        const texto = String(compatibles).trim();
+        try {
+            const parsed = JSON.parse(texto);
+            compatibles = Array.isArray(parsed) ? parsed.map(String) : texto.split(/[,;]/);
+        } catch (e) {
+            compatibles = texto.split(/[,;]/);
+        }
+    }
+    return compatibles.map(tipo => tipo.trim()).includes(String(unidad.id_tipo_unidad));
+}
+
+function cargaCompatibleConCliente(carga, idCliente) {
+    return !carga.id_cliente || String(carga.id_cliente) === String(idCliente || '');
+}
+
+function filtrarCargasPorUnidad(idUnidadSeleccionada) {
+    const idCliente = document.getElementById('f_cliente').value;
+    if (!idUnidadSeleccionada) {
+        return todasCargasData.filter(c => !c.id_viaje && cargaCompatibleConCliente(c, idCliente));
+    }
+    
+    const unidad = unidadesData.find(u => String(u.id_unidad) === String(idUnidadSeleccionada));
+    if (!unidad) return todasCargasData.filter(c => !c.id_viaje && cargaCompatibleConCliente(c, idCliente));
+    
+    return todasCargasData.filter(c => {
+        if (c.id_viaje) return false;
+        return cargaCompatibleConCliente(c, idCliente) && cargaCompatibleConUnidad(c, unidad);
+    });
+}
+
+function renderizarCargasDisponibles(idUnidadSeleccionada) {
+    const container = document.getElementById('cargasDisponiblesContainer');
+    if (!container) return;
+
+    const cargas = filtrarCargasPorUnidad(idUnidadSeleccionada);
+    if (cargas.length === 0) {
+        container.innerHTML = '<small class="text-muted d-block">No hay cargas disponibles compatibles con esta unidad</small>';
+        return;
+    }
+
+    container.innerHTML = cargas.map(carga => `
+        <div class="form-check">
+            <input class="form-check-input carga-disponible-check" type="checkbox" name="cargas" value="${carga.id_carga}" id="disp_carga_${carga.id_carga}">
+            <label class="form-check-label small" for="disp_carga_${carga.id_carga}" style="cursor: pointer;">
+                ${carga.descripcion} (${carga.peso_ton} ton)
+                ${carga.tipo_carga_nombre ? `<span class="badge bg-secondary ms-1">${carga.tipo_carga_nombre}</span>` : ''}
+            </label>
+        </div>
+    `).join('');
+}
+
+function formatDateTimeForInput(dateStr) {
+    if (!dateStr) return '';
+    try {
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return '';
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    } catch (e) {
+        return '';
+    }
+}
+
+function getCargasAsignadas(idViaje) {
+    return todasCargasData.filter(function(carga) {
+        return String(carga.id_viaje) === String(idViaje);
+    });
+}
+
+function validarFechasViaje() {
+    var fechaSalida = document.getElementById('f_salida');
+    var fechaLlegada = document.getElementById('f_llegada');
+    if (!fechaSalida || !fechaLlegada) return true;
+    fechaSalida.setCustomValidity('');
+    fechaLlegada.setCustomValidity('');
+    if (!fechaSalida.value || !fechaLlegada.value) {
+        if (!fechaSalida.value) {
+            fechaSalida.setCustomValidity('La fecha programada es obligatoria.');
+        }
+        if (!fechaLlegada.value) {
+            fechaLlegada.setCustomValidity('Selecciona una ruta vial válida para calcular la llegada estimada.');
+        }
+        return false;
+    }
+    var salida = new Date(fechaSalida.value);
+    var llegada = new Date(fechaLlegada.value);
+    if (isNaN(salida.getTime()) || isNaN(llegada.getTime())) {
+        fechaLlegada.setCustomValidity('');
+        return true;
+    }
+    if (llegada < salida) {
+        fechaLlegada.setCustomValidity('La fecha de llegada estimada no puede ser menor a la fecha programada.');
+        fechaLlegada.reportValidity();
+        return false;
+    }
+    fechaLlegada.setCustomValidity('');
+    return true;
+}
+
+function validarRutaCalculada() {
+    var fechaLlegada = document.getElementById('f_llegada');
+    var distancia = Number(routeDistanceInput.value);
+    var geometria = routePolylineInput.value.trim();
+    if (Number.isFinite(distancia) && distancia > 0 && geometria) {
+        return true;
+    }
+
+    fechaLlegada.setCustomValidity(
+        'Selecciona ubicaciones con una ruta vial válida antes de guardar el viaje.'
+    );
+    routeStatus.textContent = 'No se puede guardar el viaje sin distancia y geometría de una ruta vial calculada.';
+    return false;
+}
+
+function validarOrigenDestino() {
+    var origen = document.getElementById('f_origen');
+    var destino = document.getElementById('f_destino');
+    if (!origen || !destino) return true;
+    if (!origen.value) {
+        origen.setCustomValidity('Seleccione un origen.');
+        return false;
+    }
+    if (!destino.value) {
+        destino.setCustomValidity('Seleccione un destino.');
+        return false;
+    }
+    if (String(origen.value) === String(destino.value)) {
+        destino.setCustomValidity('El origen y el destino no pueden ser iguales.');
+        destino.reportValidity();
+        return false;
+    }
+    origen.setCustomValidity('');
+    destino.setCustomValidity('');
+    return true;
+}
+
+function validarCargasPorUnidad() {
+    var selectUnidad = document.getElementById('f_unidad');
+    if (!selectUnidad || !selectUnidad.value) return true;
+    var unidad = unidadesData.find(u => String(u.id_unidad) === String(selectUnidad.value));
+    if (!unidad) return true;
+
+    var cargasSeleccionadas = Array.from(document.querySelectorAll('.carga-disponible-check:checked, .carga-asignada-check:checked'));
+    var pesoTotal = 0;
+    for (var checkbox of cargasSeleccionadas) {
+        var carga = todasCargasData.find(c => String(c.id_carga) === String(checkbox.value));
+        if (carga && !cargaCompatibleConUnidad(carga, unidad)) {
+            alert('La carga "' + carga.descripcion + '" no es compatible con el tipo de unidad seleccionada.');
+            checkbox.focus();
+            return false;
+        }
+        if (carga && carga.peso_ton) {
+            pesoTotal += Number(carga.peso_ton);
+        }
+        var clienteSeleccionado = document.getElementById('f_cliente').value;
+        if (carga && carga.id_cliente && String(carga.id_cliente) !== String(clienteSeleccionado)) {
+            alert('La carga "' + carga.descripcion + '" pertenece a un cliente distinto al del viaje.');
+            checkbox.focus();
+            return false;
+        }
+    }
+    if (Number.isFinite(pesoTotal) && pesoTotal > Number(unidad.capacidad_ton)) {
+        alert('El peso de las cargas seleccionadas supera la capacidad de esta unidad.');
+        return false;
+    }
+    return true;
+}
+
+function validarViajeFormulario() {
+    var ok = true;
+    var correlativoInput = document.getElementById('f_correlativo');
+    if (!correlativoInput || !correlativoInput.value) {
+        if(correlativoInput) correlativoInput.setCustomValidity('El correlativo es obligatorio.');
+        ok = false;
+    } else if (correlativoInput) {
+        correlativoInput.setCustomValidity('');
+    }
+
+    var unidad = document.getElementById('f_unidad');
+    if (!unidad || !unidad.value) {
+        if(unidad) unidad.setCustomValidity('Seleccione una unidad.');
+        ok = false;
+    } else if (unidad) {
+        unidad.setCustomValidity('');
+    }
+
+    if (!validarOrigenDestino()) ok = false;
+    if (!validarFechasViaje()) ok = false;
+    if (!validarRutaCalculada()) ok = false;
+    if (!validarCargasPorUnidad()) ok = false;
+
+    if (!ok) {
+        var primerCampo = document.querySelector(':invalid') || document.querySelector('#f_correlativo, #f_unidad, #f_origen, #f_destino, #f_salida, #f_llegada');
+        if (primerCampo && typeof primerCampo.reportValidity === 'function') {
+            primerCampo.reportValidity();
+        }
+    }
+    return ok;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    var toggleFinalizados = document.getElementById('toggleViajesFinalizados');
+    var contenidoFinalizados = document.getElementById('viajesFinalizadosContenido');
+    if (toggleFinalizados && contenidoFinalizados) {
+        toggleFinalizados.addEventListener('click', function() {
+            var mostrar = contenidoFinalizados.style.display === 'none';
+            contenidoFinalizados.style.display = mostrar ? '' : 'none';
+            toggleFinalizados.setAttribute('aria-expanded', String(mostrar));
+            toggleFinalizados.innerHTML = mostrar
+                ? '<i class="fas fa-eye-slash me-1"></i>Ocultar'
+                : '<i class="fas fa-eye me-1"></i>Mostrar';
+        });
+    }
+
+    document.querySelectorAll('.table-search-input').forEach(function(input) {
+        input.addEventListener('input', function() {
+            var table = input.closest('.card-body').querySelector('table');
+            if (!table) return;
+            var query = input.value.trim().toLocaleLowerCase();
+            table.querySelectorAll('tbody tr').forEach(function(row) {
+                var cells = row.cells;
+                var unidad = cells[3] ? cells[3].textContent.toLocaleLowerCase() : '';
+                var conductor = cells[4] ? cells[4].textContent.toLocaleLowerCase() : '';
+                row.style.display = unidad.includes(query) || conductor.includes(query) ? '' : 'none';
+            });
+        });
+    });
+
+    var selectUnidad = document.getElementById('f_unidad');
+    if (selectUnidad) {
+        actualizarUnidadesDisponibles();
+        selectUnidad.addEventListener('change', function() {
+            renderizarCargasDisponibles(this.value);
+        });
+        renderizarCargasDisponibles(selectUnidad.value);
+    }
+    var selectCliente = document.getElementById('f_cliente');
+    if (selectCliente) {
+        selectCliente.addEventListener('change', function() {
+            renderizarCargasDisponibles(document.getElementById('f_unidad').value);
+        });
+    }
+    ['f_origen', 'f_destino'].forEach(function(id) {
+        var locationSelect = document.getElementById(id);
+        var departmentSelect = document.getElementById(id + '_departamento');
+        if (departmentSelect) {
+            departmentSelect.addEventListener('change', function() {
+                filterLocationOptions(id);
+                updateRoutePreview();
+            });
+        }
+        if (locationSelect) {
+            locationSelect.addEventListener('change', updateRoutePreview);
+            filterLocationOptions(id);
+        }
+    });
+    if (routePreviewMap) {
+        setTimeout(function() { routePreviewMap.invalidateSize(); }, 100);
+        updateRoutePreview();
+    }
+
+    document.querySelectorAll('.delete-viaje-form').forEach(function(form) {
+        form.addEventListener('submit', function(event) {
+            event.preventDefault();
+            if (confirm('¿Estás seguro de eliminar este viaje? Las cargas asociadas quedarán disponibles.')) {
+                HTMLFormElement.prototype.submit.call(form);
+            }
+        });
+    });
+
+    document.querySelectorAll('.cancel-viaje-form').forEach(function(form) {
+        form.addEventListener('submit', function(event) {
+            if (!confirm('¿Cancelar este viaje programado? Las cargas quedarán disponibles para otro viaje.')) {
+                event.preventDefault();
+            }
+        });
+    });
+
+    var viajeForm = document.getElementById('viajeForm');
+    var fechaSalida = document.getElementById('f_salida');
+    var fechaLlegada = document.getElementById('f_llegada');
+
+    if (fechaSalida && fechaLlegada) {
+        fechaSalida.addEventListener('change', function() {
+            fechaLlegada.min = fechaSalida.value;
+            fechaLlegada.setCustomValidity('');
+            updateEstimatedArrival();
+        });
+    }
+
+    if (viajeForm) {
+        viajeForm.addEventListener('submit', function(event) {
+            if (routeRequestPending && !submitAfterRoute) {
+                event.preventDefault();
+                submitAfterRoute = true;
+                routeStatus.textContent = 'Terminando de calcular la ruta antes de guardar...';
+                routePromise.finally(function() {
+                    submitAfterRoute = false;
+                    viajeForm.requestSubmit();
+                });
+                return;
+            }
+            if (!validarViajeFormulario()) {
+                event.preventDefault();
+            }
+        });
+    }
+
+    // Botón Editar
+    document.querySelectorAll('.btn-editar').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var row = this.closest('tr');
+            var idViaje = row.getAttribute('data-id');
+            var estadoNum = parseInt(row.getAttribute('data-estado'), 10);
+
+            if (estadoNum === 2) {
+                alert('No se puede editar un viaje en curso.');
+                return;
+            }
+
+            document.getElementById('formTitle').innerHTML = '<i class="fas fa-edit me-1 text-success"></i>Editar Viaje';
+            document.getElementById('btnCancel').style.display = 'block';
+            document.getElementById('formAction').value = 'update';
+            document.getElementById('formId').value = idViaje;
+            document.getElementById('btnSubmit').innerHTML = '<i class="fas fa-save me-1"></i>Actualizar Viaje';
+            document.getElementById('btnSubmit').classList.replace('btn-primary', 'btn-success');
+            
+            document.getElementById('f_correlativo').value = row.getAttribute('data-correlativo');
+            actualizarUnidadesDisponibles(row.getAttribute('data-unidad'));
+            document.getElementById('f_unidad').value = row.getAttribute('data-unidad');
+            document.getElementById('f_cliente').value = row.getAttribute('data-cliente');
+            setLocationSelection('f_origen', row.getAttribute('data-origen'));
+            setLocationSelection('f_destino', row.getAttribute('data-destino'));
+            document.getElementById('f_salida').value = formatDateTimeForInput(row.getAttribute('data-fecha-salida'));
+            updateRoutePreview();
+            
+            renderizarCargasDisponibles(row.getAttribute('data-unidad'));
+            
+            document.querySelectorAll('.carga-disponible-check').forEach(function(checkbox) {
+                checkbox.checked = false;
+            });
+            
+            var sectionAsignadas = document.getElementById('cargasAsignadasSection');
+            var containerAsignadas = document.getElementById('cargasAsignadasContainer');
+            var cargasAsignadas = getCargasAsignadas(idViaje);
+            
+            if (cargasAsignadas.length > 0) {
+                sectionAsignadas.style.display = 'block';
+                containerAsignadas.innerHTML = '';
+                cargasAsignadas.forEach(function(carga) {
+                    var div = document.createElement('div');
+                    div.className = 'form-check';
+                    div.innerHTML = `
+                        <input class="form-check-input carga-asignada-check" type="checkbox" name="cargas_existentes" value="${carga.id_carga}" id="asig_carga_${carga.id_carga}" checked>
+                        <label class="form-check-label small" for="asig_carga_${carga.id_carga}" style="cursor: pointer;">
+                            ${carga.descripcion} (${carga.peso_ton} ton)
+                        </label>
+                    `;
+                    containerAsignadas.appendChild(div);
+                });
+            } else {
+                sectionAsignadas.style.display = 'none';
+            }
+
+            if (fechaSalida && fechaLlegada) {
+                fechaLlegada.min = fechaSalida.value;
+            }
+            
+            document.getElementById('viajeForm').scrollIntoView({ behavior: 'smooth' });
+        });
+    });
+});
+
+function resetForm() {
+    document.getElementById('viajeForm').reset();
+    actualizarUnidadesDisponibles();
+    document.getElementById('formTitle').innerHTML = '<i class="fas fa-plus-circle me-1 text-primary"></i>Registrar Nuevo Viaje';
+    document.getElementById('btnCancel').style.display = 'none';
+    document.getElementById('formAction').value = 'create';
+    document.getElementById('formId').value = '';
+    document.getElementById('btnSubmit').innerHTML = '<i class="fas fa-save me-1"></i>Guardar Viaje';
+    document.getElementById('btnSubmit').classList.remove('btn-success');
+    document.getElementById('btnSubmit').classList.add('btn-primary');
+    document.getElementById('cargasAsignadasSection').style.display = 'none';
+
+    renderizarCargasDisponibles('');
+    filterLocationOptions('f_origen');
+    filterLocationOptions('f_destino');
+    updateRoutePreview();
+}
+
+function actualizarUnidadesDisponibles(unidadEnEdicion) {
+    var unidadSelect = document.getElementById('f_unidad');
+    if (!unidadSelect) return;
+
+    Array.from(unidadSelect.options).forEach(function(option) {
+        var ocupada = option.dataset.viajeActivo === 'true';
+        var esUnidadEnEdicion = unidadEnEdicion && option.value === unidadEnEdicion;
+        option.disabled = ocupada && !esUnidadEnEdicion;
+        option.hidden = ocupada && !esUnidadEnEdicion;
+    });
+}
+</script>
+{% endblock %}

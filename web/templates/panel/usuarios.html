@@ -1,0 +1,222 @@
+{% extends 'panel/base.html' %}
+{% block title %}Usuarios - Control de Flota{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h2 class="fw-bold">
+            <i class="fas fa-users me-2 text-primary"></i>Gestión de Usuarios
+        </h2>
+        <p class="text-muted">Administrar usuarios del sistema con control de permisos</p>
+    </div>
+</div>
+
+<div class="row g-4">
+    {% if is_admin %}
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h6 class="mb-0" id="formTitle">
+                    <i class="fas fa-user-plus me-1 text-primary"></i>Nuevo Usuario
+                </h6>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="resetForm()" style="display:none;" id="btnCancel">
+                    <i class="fas fa-times"></i> Cancelar
+                </button>
+            </div>
+            <div class="card-body">
+                <form method="POST" id="usuarioForm">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" id="formAction" value="create">
+                    <input type="hidden" name="id_usuario" id="formId">
+                    
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">Nombre completo</label>
+                        <input type="text" name="nombre" id="f_nombre" class="form-control form-control-sm" required>
+                    </div>
+                    
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">Usuario</label>
+                        <input type="text" name="usuario" id="f_usuario" class="form-control form-control-sm" required>
+                    </div>
+                    
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">Correo electrónico</label>
+                        <input type="email" name="correo" id="f_correo" class="form-control form-control-sm" required>
+                    </div>
+                    
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">Rol</label>
+                        <select name="id_rol" id="f_rol" class="form-select form-select-sm" required>
+                            <option value="">Seleccione un rol...</option>
+                            {% for rol in roles %}
+                                <option value="{{ rol.id_rol }}">{{ rol.nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">
+                            Contraseña
+                            <span id="passHint" class="text-muted fw-normal">(Obligatoria al crear)</span>
+                        </label>
+                        <input type="password" name="password" id="f_password" class="form-control form-control-sm" required>
+                        <small class="text-muted" id="passHelp">Mínimo 8 caracteres</small>
+                    </div>
+                    
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="activo" name="activo" checked>
+                        <label class="form-check-label" for="activo">Usuario activo</label>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary btn-sm w-100" id="btnSubmit">
+                        <i class="fas fa-save me-1"></i>Crear Usuario
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="{% if is_admin %}col-md-8{% else %}col-md-12{% endif %}">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">
+                    <i class="fas fa-list me-2 text-primary"></i>Lista de Usuarios
+                </h6>
+                <span class="badge bg-primary">{{ usuarios|length }} total</span>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>ID</th>
+                                <th>Nombre</th>
+                                <th>Usuario</th>
+                                <th>Rol</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for usuario in usuarios %}
+                            <tr class="{% if not usuario.activo %}table-secondary text-muted{% endif %}">
+                                <td>{{ usuario.id_usuario }}</td>
+                                <td>
+                                    {{ usuario.nombre }}
+                                    {% if usuario.id_usuario == user_data.id_usuario %}
+                                        <span class="badge bg-info ms-1">Tú</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ usuario.usuario }}</td>
+                                <td><span class="badge bg-primary">{{ usuario.rol_nombre }}</span></td>
+                                <td>
+                                    {% if usuario.activo %}
+                                        <span class="badge bg-success">Activo</span>
+                                    {% else %}
+                                        <span class="badge bg-warning text-dark">Inactivo</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if is_admin %}
+                                        {% if usuario.id_usuario != user_data.id_usuario %}
+                                            <!-- Botón Editar -->
+                                            <button class="btn btn-sm btn-info text-white" 
+                                                    onclick="editarUsuario('{{ usuario.id_usuario }}', '{{ usuario.nombre }}', '{{ usuario.usuario }}', '{{ usuario.correo }}', '{{ usuario.id_rol }}')" 
+                                                    title="Editar">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            
+                                            <!-- Botón Activar/Desactivar -->
+                                            <form method="POST" style="display:inline;">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="action" value="toggle_activo">
+                                                <input type="hidden" name="id_usuario" value="{{ usuario.id_usuario }}">
+                                                <input type="hidden" name="nuevo_estado" value="{{ usuario.activo|yesno:'false,true' }}">
+                                                <button type="submit" 
+                                                        class="btn btn-sm {% if usuario.activo %}btn-warning{% else %}btn-success{% endif %}" 
+                                                        title="{% if usuario.activo %}Desactivar{% else %}Activar{% endif %}"
+                                                        onclick="return confirm('¿Cambiar estado de este usuario?');">
+                                                    <i class="fas {% if usuario.activo %}fa-ban{% else %}fa-check{% endif %}"></i>
+                                                </button>
+                                            </form>
+                                            
+                                            <!-- Botón Eliminar -->
+                                            <form method="POST" style="display:inline;" 
+                                                  onsubmit="return confirm('⚠️ ¿Estás seguro de ELIMINAR este usuario? Esta acción no se puede deshacer.');">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="action" value="delete">
+                                                <input type="hidden" name="id_usuario" value="{{ usuario.id_usuario }}">
+                                                <button type="submit" class="btn btn-sm btn-danger" title="Eliminar">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </form>
+                                        {% else %}
+                                            <span class="text-muted small" title="No puedes modificar tu propia cuenta">
+                                                <i class="fas fa-lock"></i> Bloqueado
+                                            </span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="text-muted small">Sin permisos</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center text-muted py-4">
+                                    <i class="fas fa-users fa-2x mb-2 d-block"></i>
+                                    No hay usuarios registrados
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function editarUsuario(id, nombre, usuario, correo, rol) {
+    // Cambiar formulario a modo edición
+    document.getElementById('formTitle').innerHTML = '<i class="fas fa-user-edit me-1 text-success"></i>Editar Usuario';
+    document.getElementById('btnCancel').style.display = 'block';
+    document.getElementById('formAction').value = 'update';
+    document.getElementById('formId').value = id;
+    document.getElementById('btnSubmit').innerHTML = '<i class="fas fa-save me-1"></i>Actualizar Usuario';
+    document.getElementById('btnSubmit').classList.remove('btn-primary');
+    document.getElementById('btnSubmit').classList.add('btn-success');
+    
+    // Llenar campos
+    document.getElementById('f_nombre').value = nombre;
+    document.getElementById('f_usuario').value = usuario;
+    document.getElementById('f_correo').value = correo;
+    document.getElementById('f_rol').value = rol;
+    
+    // En modo edición, la contraseña es opcional
+    document.getElementById('f_password').required = false;
+    document.getElementById('passHint').textContent = '(Dejar vacío para mantener la actual)';
+    document.getElementById('passHelp').textContent = 'Opcional - Solo cambia si deseas actualizarla';
+    
+    // Scroll hacia el formulario
+    document.getElementById('usuarioForm').scrollIntoView({ behavior: 'smooth' });
+}
+
+function resetForm() {
+    document.getElementById('usuarioForm').reset();
+    document.getElementById('formTitle').innerHTML = '<i class="fas fa-user-plus me-1 text-primary"></i>Nuevo Usuario';
+    document.getElementById('btnCancel').style.display = 'none';
+    document.getElementById('formAction').value = 'create';
+    document.getElementById('formId').value = '';
+    document.getElementById('btnSubmit').innerHTML = '<i class="fas fa-save me-1"></i>Crear Usuario';
+    document.getElementById('btnSubmit').classList.remove('btn-success');
+    document.getElementById('btnSubmit').classList.add('btn-primary');
+    
+    // En modo crear, la contraseña es obligatoria
+    document.getElementById('f_password').required = true;
+    document.getElementById('passHint').textContent = '(Obligatoria al crear)';
+    document.getElementById('passHelp').textContent = 'Mínimo 8 caracteres';
+}
+</script>
+{% endblock %}

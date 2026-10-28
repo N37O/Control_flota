@@ -1,0 +1,385 @@
+{% extends 'panel/base.html' %}
+{% block title %}Unidades - Catálogos{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h2 class="fw-bold">
+            <i class="fas fa-truck me-2 text-primary"></i>Catálogo de Unidades
+        </h2>
+        <p class="text-muted">Consulta el combustible actual registrado después de cargar o al registrar una salida o llegada. El nivel depende de la lectura anotada por el operador.</p>
+    </div>
+</div>
+
+<div class="row g-4">
+    {% if is_admin %}
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h6 class="mb-0" id="formTitle">
+                    <i class="fas fa-plus-circle me-1 text-primary"></i>Crear Nueva Unidad
+                </h6>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetForm()" title="Limpiar formulario">
+                    <i class="fas fa-eraser"></i>
+                </button>
+            </div>
+            <div class="card-body">
+                <form method="POST" id="unidadForm">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" id="formAction" value="create">
+                    <input type="hidden" name="id_unidad" id="formId">
+                    
+                    <!-- BUSCADOR DE PLACA -->
+                    <div class="mb-3 p-2 rounded" style="background-color: #f8f9fa; border: 1px solid #dee2e6;">
+                        <label class="form-label small fw-bold text-secondary mb-1">
+                            <i class="fas fa-search me-1"></i>¿Editar unidad existente?
+                        </label>
+                        <select id="buscador_placa" class="form-select form-select-sm" onchange="cargarDatosUnidad()">
+                            <option value="">-- Seleccionar placa para editar --</option>
+                            {% for u in todas_unidades %}
+                                <option value="{{ u.id_unidad }}" 
+                                        data-placa="{{ u.placa }}"
+                                        data-codigo="{{ u.codigo_interno }}"
+                                        data-tipo="{{ u.id_tipo_unidad }}"
+                                        data-estado="{{ u.id_estado_unidad }}"
+                                        data-capacidad="{{ u.capacidad_ton }}"
+                                        data-capacidad-tanque="{{ u.capacidad_tanque_gal|default:'' }}"
+                                        data-conductor="{{ u.id_conductor|default:'' }}">
+                                    {{ u.placa }} - {{ u.tipo_nombre|default:"Sin tipo" }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">Placa</label>
+                        <input type="text" name="placa" id="f_placa" class="form-control form-control-sm" required placeholder="Ej: P-123ABC" style="text-transform: uppercase;">
+                    </div>
+                    
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">Código Interno</label>
+                        <input type="text" name="codigo_interno" id="f_codigo" class="form-control form-control-sm" required placeholder="Ej: U-001">
+                    </div>
+                    
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">Tipo de Unidad</label>
+                        <select name="id_tipo_unidad" id="f_tipo" class="form-select form-select-sm" required>
+                            <option value="">Seleccione...</option>
+                            {% for t in tipos %}
+                                <option value="{{ t.id_tipo_unidad }}">{{ t.nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">Estado</label>
+                        <select name="id_estado_unidad" id="f_estado" class="form-select form-select-sm" required>
+                            <option value="">Seleccione...</option>
+                            {% for e in estados %}
+                                <option value="{{ e.id_estado_unidad }}">{{ e.nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Capacidad de carga (toneladas)</label>
+                        <input type="text" inputmode="decimal" pattern="\d+(\.\d{1,2})?" name="capacidad_ton" id="f_capacidad" class="form-control form-control-sm" required placeholder="Ej: 25.5" autocomplete="off">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold" for="f_capacidad_tanque">Capacidad del tanque (galones)</label>
+                        <input type="number" inputmode="decimal" step="0.01" min="0.01" name="capacidad_tanque_gal" id="f_capacidad_tanque" class="form-control form-control-sm" required placeholder="Ej.: 80">
+                        <small class="text-muted">Es la capacidad máxima del tanque, no el combustible que tiene actualmente.</small>
+                    </div>
+                    
+                    <!-- SELECTOR DE CONDUCTOR -->
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-success">
+                            <i class="fas fa-user me-1"></i>Conductor Asignado
+                        </label>
+                        <select name="id_conductor" id="f_conductor" class="form-select form-select-sm">
+                            <option value="">-- Sin conductor --</option>
+                            {% for c in conductores_disponibles %}
+                                <option value="{{ c.id_conductor }}">
+                                    {{ c.nombre }} ({{ c.licencia }})
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted d-block mt-1">
+                            <i class="fas fa-info-circle"></i> Solo conductores sin unidad asignada
+                        </small>
+                        
+                        <div id="conductorActualInfo" class="mt-2" style="display:none;">
+                            <small class="text-primary fw-bold">
+                                <i class="fas fa-link"></i> Conductor actual:
+                            </small>
+                            <div class="alert alert-info py-1 mt-1 mb-0">
+                                <small id="conductorActualNombre"></small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary btn-sm w-100" id="btnSubmit">
+                        <i class="fas fa-save me-1"></i>Guardar Unidad
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- TABLA -->
+    <div class="{% if is_admin %}col-md-8{% else %}col-md-12{% endif %}">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h6 class="mb-0"><i class="fas fa-list me-2 text-primary"></i>Unidades Registradas</h6>
+                <span class="badge bg-primary">{{ unidades|length }} total</span>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Placa</th>
+                                <th>Código</th>
+                                <th>Tipo</th>
+                                <th>Conductor</th>
+                                <th>Carga máxima</th>
+                                <th>Capacidad del tanque</th>
+                                <th>Combustible actual</th>
+                                <th>Odómetro</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for u in unidades %}
+                            <tr class="{% if not u.activo %}table-secondary text-muted{% endif %}">
+                                <td><strong>{{ u.placa }}</strong></td>
+                                <td>{{ u.codigo_interno }}</td>
+                                <td>{{ u.tipo_nombre|default:"-" }}</td>
+                                <td>
+                                    {% if u.conductor_nombre %}
+                                        <span class="badge bg-info">
+                                            <i class="fas fa-user me-1"></i>{{ u.conductor_nombre }}
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-warning text-dark">Sin asignar</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ u.capacidad_ton }} Ton</td>
+                                <td>
+                                    {% if u.capacidad_tanque_gal %}
+                                        {{ u.capacidad_tanque_gal }} gal
+                                    {% else %}
+                                        <span class="text-warning">Por registrar</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if u.ultima_lectura_combustible_gal != None %}
+                                        <strong>{{ u.ultima_lectura_combustible_gal }} gal</strong>
+                                        <small class="text-muted d-block">
+                                            Actualizado: {{ u.fecha_ultima_lectura_combustible|date:"d/m/Y H:i" }}
+                                        </small>
+                                    {% else %}
+                                        <span class="text-muted">Sin lectura registrada</span>
+                                    {% endif %}
+                                </td>
+                                <td><small>{{ u.odometro_actual|default:"0" }} km</small></td>
+                                <td>
+                                    {% if u.estado_nombre == 'DISPONIBLE' %}
+                                        <span class="badge bg-success">{{ u.estado_nombre }}</span>
+                                    {% elif u.estado_nombre == 'EN_VIAJE' %}
+                                        <span class="badge bg-primary">{{ u.estado_nombre }}</span>
+                                    {% elif u.estado_nombre == 'MANTENIMIENTO' %}
+                                        <span class="badge bg-warning text-dark">{{ u.estado_nombre }}</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ u.estado_nombre|default:"-" }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if is_admin %}
+                                        <!-- Botón Editar/Asignar -->
+                                        <button class="btn btn-sm btn-info text-white btn-asignar" 
+                                                data-id="{{ u.id_unidad }}"
+                                                data-placa="{{ u.placa }}"
+                                                data-conductor="{{ u.id_conductor|default:'' }}"
+                                                title="Editar/Asignar conductor">
+                                            <i class="fas fa-user-plus"></i>
+                                        </button>
+                                        
+                                        <!-- Botón Quitar conductor (solo si tiene conductor) -->
+                                        {% if u.conductor_nombre %}
+                                        <form method="POST" action="{% url 'panel:quitar_conductor' %}" style="display:inline;" onsubmit="return confirm('¿Quitar conductor de esta unidad?');">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="id_unidad" value="{{ u.id_unidad }}">
+                                            <button type="submit" class="btn btn-sm btn-warning" title="Quitar conductor">
+                                                <i class="fas fa-user-times"></i>
+                                            </button>
+                                        </form>
+                                        {% endif %}
+                                        
+                                        <!-- Botón Activar/Desactivar -->
+                                        <form method="POST" style="display:inline;">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="action" value="toggle_activo">
+                                            <input type="hidden" name="id_unidad" value="{{ u.id_unidad }}">
+                                            <input type="hidden" name="nuevo_estado" value="{{ u.activo|yesno:'false,true' }}">
+                                            <button type="submit" class="btn btn-sm {% if u.activo %}btn-outline-danger{% else %}btn-outline-success{% endif %}" title="{% if u.activo %}Desactivar{% else %}Activar{% endif %}">
+                                                <i class="fas {% if u.activo %}fa-ban{% else %}fa-check{% endif %}"></i>
+                                            </button>
+                                        </form>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="10" class="text-center text-muted py-4">
+                                    <i class="fas fa-truck fa-2x mb-2 d-block"></i>
+                                    No hay unidades registradas
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- DATOS PARA JAVASCRIPT -->
+<script type="application/json" id="conductores-data">
+[
+{% for c in todos_conductores %}
+  {
+    "id_conductor": "{{ c.id_conductor|escapejs }}",
+    "nombre": "{{ c.nombre|escapejs }}",
+    "licencia": "{{ c.licencia|default:''|escapejs }}"
+  }{% if not forloop.last %},{% endif %}
+{% endfor %}
+]
+</script>
+
+<script>
+var conductoresData = JSON.parse(document.getElementById('conductores-data').textContent || '[]');
+
+var capacidadInput = document.getElementById('f_capacidad');
+capacidadInput.addEventListener('input', function() {
+    var valor = this.value.replace(/[^0-9.]/g, '');
+    var punto = valor.indexOf('.');
+    if (punto !== -1) {
+        valor = valor.substring(0, punto + 1) + valor.substring(punto + 1).replace(/\./g, '').substring(0, 2);
+    }
+    this.value = valor;
+    this.setCustomValidity('');
+});
+
+document.getElementById('unidadForm').addEventListener('submit', function(event) {
+    var capacidad = capacidadInput.value;
+    if (!/^\d+(\.\d{1,2})?$/.test(capacidad) || Number(capacidad) <= 0) {
+        event.preventDefault();
+        capacidadInput.setCustomValidity('Ingrese una capacidad mayor que cero, con hasta dos decimales.');
+        capacidadInput.reportValidity();
+    }
+});
+
+document.getElementById('f_capacidad_tanque').addEventListener('input', function() {
+    this.setCustomValidity('');
+});
+
+function cargarDatosUnidad() {
+    var selector = document.getElementById('buscador_placa');
+    var selectedOption = selector.options[selector.selectedIndex];
+    
+    if (!selectedOption || !selectedOption.value) {
+        resetForm();
+        return;
+    }
+    
+    document.getElementById('formAction').value = 'update';
+    document.getElementById('formId').value = selectedOption.value;
+    document.getElementById('formTitle').innerHTML = '<i class="fas fa-user-plus me-1 text-success"></i>Editando: ' + selectedOption.getAttribute('data-placa');
+    document.getElementById('btnSubmit').innerHTML = '<i class="fas fa-save me-1"></i>Actualizar Unidad';
+    document.getElementById('btnSubmit').classList.replace('btn-primary', 'btn-success');
+    
+    document.getElementById('f_placa').value = selectedOption.getAttribute('data-placa');
+    document.getElementById('f_codigo').value = selectedOption.getAttribute('data-codigo');
+    document.getElementById('f_tipo').value = selectedOption.getAttribute('data-tipo');
+    document.getElementById('f_estado').value = selectedOption.getAttribute('data-estado');
+    document.getElementById('f_capacidad').value = selectedOption.getAttribute('data-capacidad');
+    document.getElementById('f_capacidad_tanque').value = selectedOption.getAttribute('data-capacidad-tanque');
+    
+    var conductorId = selectedOption.getAttribute('data-conductor');
+    var conductorSelect = document.getElementById('f_conductor');
+    var conductorActualInfo = document.getElementById('conductorActualInfo');
+    var conductorActualNombre = document.getElementById('conductorActualNombre');
+    
+    conductorSelect.innerHTML = '<option value="">-- Sin conductor --</option>';
+    
+    if (conductorId && conductorId !== '' && conductorId !== 'None') {
+        var conductorActual = conductoresData.find(function(c) {
+            return c.id_conductor === conductorId;
+        });
+        
+        if (conductorActual) {
+            var optionActual = document.createElement('option');
+            optionActual.value = conductorActual.id_conductor;
+            optionActual.textContent = conductorActual.nombre + ' (' + conductorActual.licencia + ') [ACTUAL]';
+            optionActual.selected = true;
+            conductorSelect.appendChild(optionActual);
+            
+            conductorActualInfo.style.display = 'block';
+            conductorActualNombre.textContent = conductorActual.nombre + ' - Licencia: ' + conductorActual.licencia;
+        }
+        
+        conductoresData.forEach(function(c) {
+            if (c.id_conductor !== conductorId) {
+                var option = document.createElement('option');
+                option.value = c.id_conductor;
+                option.textContent = c.nombre + ' (' + c.licencia + ')';
+                conductorSelect.appendChild(option);
+            }
+        });
+    } else {
+        conductorActualInfo.style.display = 'none';
+        conductoresData.forEach(function(c) {
+            var option = document.createElement('option');
+            option.value = c.id_conductor;
+            option.textContent = c.nombre + ' (' + c.licencia + ')';
+            conductorSelect.appendChild(option);
+        });
+    }
+    
+    document.getElementById('unidadForm').scrollIntoView({ behavior: 'smooth' });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.btn-asignar').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var idUnidad = this.getAttribute('data-id');
+            var selector = document.getElementById('buscador_placa');
+            
+            for (var i = 0; i < selector.options.length; i++) {
+                if (selector.options[i].value === idUnidad) {
+                    selector.selectedIndex = i;
+                    break;
+                }
+            }
+            cargarDatosUnidad();
+        });
+    });
+});
+
+function resetForm() {
+    document.getElementById('unidadForm').reset();
+    document.getElementById('formAction').value = 'create';
+    document.getElementById('formId').value = '';
+    document.getElementById('formTitle').innerHTML = '<i class="fas fa-plus-circle me-1 text-primary"></i>Crear Nueva Unidad';
+    document.getElementById('btnSubmit').innerHTML = '<i class="fas fa-save me-1"></i>Guardar Unidad';
+    document.getElementById('btnSubmit').classList.remove('btn-success');
+    document.getElementById('btnSubmit').classList.add('btn-primary');
+    document.getElementById('conductorActualInfo').style.display = 'none';
+}
+</script>
+{% endblock %}

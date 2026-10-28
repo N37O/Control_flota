@@ -1,0 +1,176 @@
+{% extends 'panel/base.html' %}
+{% block title %}Reportes e historial - Control de Flota{% endblock %}
+
+{% block content %}
+<div class="row mb-4 align-items-end">
+    <div class="col-md-8">
+        <h2 class="fw-bold mb-1"><i class="fas fa-chart-bar me-2 text-primary"></i>Reportes e historial</h2>
+        <p class="text-muted mb-0">Indicadores de flota y consulta de viajes registrados</p>
+    </div>
+    <div class="col-md-4 text-md-end mt-3 mt-md-0">
+        <a href="{% url 'panel:seguimiento_gps' %}" class="btn btn-outline-primary btn-sm">
+            <i class="fas fa-map-marked-alt me-1"></i>Seguimiento GPS
+        </a>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-xl">
+        <div class="card report-stat-card h-100">
+            <div class="card-body">
+                <span class="report-stat-label">Unidades disponibles</span>
+                <strong class="report-stat-value text-success">{{ resumen.unidades_disponibles|default:0 }}</strong>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl">
+        <div class="card report-stat-card h-100">
+            <div class="card-body">
+                <span class="report-stat-label">En tránsito</span>
+                <strong class="report-stat-value text-primary">{{ resumen.unidades_transito|default:0 }}</strong>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl">
+        <div class="card report-stat-card h-100">
+            <div class="card-body">
+                <span class="report-stat-label">Viajes programados</span>
+                <strong class="report-stat-value">{{ resumen.viajes_programados|default:0 }}</strong>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl">
+        <div class="card report-stat-card h-100">
+            <div class="card-body">
+                <span class="report-stat-label">Llegadas atrasadas</span>
+                <strong class="report-stat-value {% if resumen.alertas_pendientes %}text-danger{% else %}text-success{% endif %}">{{ resumen.alertas_pendientes|default:0 }}</strong>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl">
+        <div class="card report-stat-card h-100">
+            <div class="card-body">
+                <span class="report-stat-label">Rendimiento promedio</span>
+                <strong class="report-stat-value">{{ rendimiento.rendimiento_promedio|default:0 }} <small>km/gal</small></strong>
+                <small class="text-muted">{{ rendimiento.total_viajes|default:0 }} viajes completados</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<section class="card report-filter-card mb-4">
+    <div class="card-header bg-white">
+        <h5 class="mb-0 fw-bold"><i class="fas fa-filter me-2 text-primary"></i>Filtrar historial</h5>
+    </div>
+    <div class="card-body">
+        <form method="get" action="{% url 'panel:reportes' %}">
+            <div class="row g-3 align-items-end">
+                <div class="col-lg-3 col-md-6">
+                    <label for="filterSearch" class="form-label small fw-semibold">Buscar</label>
+                    <input type="search" id="filterSearch" name="buscar" class="form-control form-control-sm" value="{{ filtros.buscar }}" placeholder="Viaje, unidad, conductor o ruta">
+                </div>
+                <div class="col-lg-2 col-md-6">
+                    <label for="filterUnit" class="form-label small fw-semibold">Unidad</label>
+                    <select id="filterUnit" name="unidad" class="form-select form-select-sm">
+                        <option value="">Todas</option>
+                        {% for unidad in unidades %}
+                        <option value="{{ unidad.id_unidad }}" {% if filtros.unidad == unidad.id_unidad|stringformat:'s' %}selected{% endif %}>{{ unidad.placa }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-lg-2 col-md-6">
+                    <label for="filterDriver" class="form-label small fw-semibold">Conductor</label>
+                    <select id="filterDriver" name="conductor" class="form-select form-select-sm">
+                        <option value="">Todos</option>
+                        {% for conductor in conductores %}
+                        <option value="{{ conductor.id_conductor }}" {% if filtros.conductor == conductor.id_conductor|stringformat:'s' %}selected{% endif %}>{{ conductor.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-lg-2 col-md-6">
+                    <label for="filterStatus" class="form-label small fw-semibold">Estado</label>
+                    <select id="filterStatus" name="estado" class="form-select form-select-sm">
+                        <option value="">Todos</option>
+                        <option value="1" {% if filtros.estado == '1' %}selected{% endif %}>Programado</option>
+                        <option value="2" {% if filtros.estado == '2' %}selected{% endif %}>En tránsito</option>
+                        <option value="3" {% if filtros.estado == '3' %}selected{% endif %}>Completado</option>
+                        <option value="4" {% if filtros.estado == '4' %}selected{% endif %}>Cancelado</option>
+                    </select>
+                </div>
+                <div class="col-lg-1 col-md-6">
+                    <label for="filterFrom" class="form-label small fw-semibold">Desde</label>
+                    <input type="date" id="filterFrom" name="desde" class="form-control form-control-sm" value="{{ filtros.desde }}">
+                </div>
+                <div class="col-lg-1 col-md-6">
+                    <label for="filterTo" class="form-label small fw-semibold">Hasta</label>
+                    <input type="date" id="filterTo" name="hasta" class="form-control form-control-sm" value="{{ filtros.hasta }}">
+                </div>
+                <div class="col-lg-1 col-md-6 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary btn-sm flex-grow-1" title="Aplicar filtros" aria-label="Aplicar filtros">
+                        <i class="fas fa-search"></i>
+                    </button>
+                    <a href="{% url 'panel:reportes' %}" class="btn btn-outline-secondary btn-sm" title="Limpiar filtros" aria-label="Limpiar filtros">
+                        <i class="fas fa-times"></i>
+                    </a>
+                </div>
+            </div>
+        </form>
+    </div>
+</section>
+
+<section class="card report-history-card">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <div>
+            <h5 class="mb-1 fw-bold"><i class="fas fa-history me-2 text-primary"></i>Historial de viajes</h5>
+            <small class="text-muted">{{ historial|length }} resultados (máximo 50 por consulta)</small>
+        </div>
+        <span class="badge report-count-badge">{{ historial|length }}</span>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-sm align-middle mb-0 report-history-table">
+                <thead class="table-light">
+                    <tr>
+                        <th>Viaje</th>
+                        <th>Unidad</th>
+                        <th>Conductor</th>
+                        <th>Origen</th>
+                        <th>Destino</th>
+                        <th>Estado</th>
+                        <th>Salida</th>
+                        <th>ETA</th>
+                        <th>Llegada real</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for viaje in historial %}
+                    <tr>
+                        <td><strong>{{ viaje.correlativo }}</strong></td>
+                        <td>{{ viaje.unidad|default:'-' }}</td>
+                        <td>{{ viaje.conductor|default:'-' }}</td>
+                        <td>{{ viaje.origen|default:'-' }}</td>
+                        <td>{{ viaje.destino|default:'-' }}</td>
+                        <td>
+                            {% if viaje.estado == 'COMPLETADO' %}
+                                <span class="badge bg-success">Completado</span>
+                            {% elif viaje.estado == 'EN_CURSO' %}
+                                <span class="badge bg-primary">En tránsito</span>
+                            {% elif viaje.estado == 'CANCELADO' %}
+                                <span class="badge bg-secondary">Cancelado</span>
+                            {% else %}
+                                <span class="badge bg-info text-dark">Programado</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-nowrap">{{ viaje.fecha_salida|default:'-' }}</td>
+                        <td class="text-nowrap">{{ viaje.fecha_llegada_est|default:'-' }}</td>
+                        <td class="text-nowrap">{{ viaje.fecha_llegada_real|default:'-' }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="9" class="text-center text-muted py-5">No hay viajes que coincidan con los filtros.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+{% endblock %}
