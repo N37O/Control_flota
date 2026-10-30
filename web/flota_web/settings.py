@@ -79,9 +79,11 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Configuración de la API REST
-API_BASE_URL = os.getenv('API_BASE_URL', 'http://127.0.0.1:8000/api')
+API_BASE_URL = os.getenv('API_BASE_URL', 'http://127.0.0.1:8001/api')
 API_TIMEOUT = 10  # segundos
 ROUTING_API_URL = os.getenv('ROUTING_API_URL', 'https://router.project-osrm.org')
+# MapTiler publica esta clave en el navegador; restringirla por dominio en MapTiler Cloud.
+MAPTILER_API_KEY = os.getenv('MAPTILER_API_KEY', '').strip()
 
 # Configuración de login
 LOGIN_URL = 'panel:login'

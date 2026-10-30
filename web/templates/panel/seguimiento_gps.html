@@ -79,7 +79,7 @@
                 <div id="trackingMap" class="tracking-map" role="img" aria-label="Mapa de ruta del viaje"></div>
             </div>
             <div class="card-footer bg-white d-flex flex-wrap justify-content-between gap-2">
-                <small class="text-muted"><i class="fas fa-map me-1"></i>Mapa base © Esri · Datos © OpenStreetMap</small>
+                <small class="text-muted"><i class="fas fa-map me-1"></i>{{ map_provider_name }} · Datos © OpenStreetMap</small>
                 <small class="text-muted" id="routeSource">La ruta se calcula al seleccionar un viaje.</small>
                 <small class="text-warning fw-bold sim-badge" id="simBadge" style="display:none;">
                     <i class="fas fa-exclamation-triangle"></i> MODO SIMULACIÓN (Datos no reales)
@@ -132,6 +132,7 @@
     </div>
 </div>
 {{ tracking_data|json_script:"tracking-data" }}
+{{ map_tile_options|json_script:"map-tile-options" }}
 {% endblock %}
 {% block extra_js %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -141,14 +142,16 @@ document.addEventListener('DOMContentLoaded', function() {
     var trips = trackingData.viajes || [];
     var positions = trackingData.posiciones || [];
     var routingApiUrl = '{{ routing_api_url|escapejs }}'.replace(/\/$/, '');
+    var mapTileUrl = '{{ map_tile_url|escapejs }}';
+    var mapTileAttribution = '{{ map_tile_attribution|escapejs }}';
+    var mapTileOptions = JSON.parse(document.getElementById('map-tile-options').textContent);
     var selector = document.getElementById('tripSelector');
     
     var map = L.map('trackingMap').setView([13.7942, -88.8965], 8);
     
-    // ✅ Esri World Street Map - Gratuito, sin API key, confiable
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
-        attribution: '&copy; Esri · Datos © OpenStreetMap contributors',
-        maxZoom: 19
+    L.tileLayer(mapTileUrl, {
+        attribution: mapTileAttribution,
+        ...mapTileOptions
     }).addTo(map);
     
     setTimeout(function() {

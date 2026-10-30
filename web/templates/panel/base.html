@@ -87,31 +87,40 @@
                             <i class="fas fa-house me-1"></i>Inicio
                         </a>
                     </li>
+                    {% if user_data.rol_nombre == 'ADMINISTRADOR' or user_data.rol_nombre == 'OPERADOR' or user_data.rol_nombre == 'SUPERVISOR' %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle {% if request.resolver_match.url_name == 'control' or request.resolver_match.url_name == 'viajes' or request.resolver_match.url_name == 'cargas' or request.resolver_match.url_name == 'tipos_carga' or request.resolver_match.url_name == 'seguimiento_gps' or request.resolver_match.url_name == 'reportes' %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="fas fa-route me-1"></i>Operaciones
                         </a>
                         <ul class="dropdown-menu">
+                            {% if user_data.rol_nombre == 'ADMINISTRADOR' or user_data.rol_nombre == 'OPERADOR' %}
                             <li><a class="dropdown-item" href="{% url 'panel:control' %}"><i class="fas fa-gas-pump me-2 text-muted"></i>Control de unidades</a></li>
                             <li><a class="dropdown-item" href="{% url 'panel:viajes' %}"><i class="fas fa-route me-2"></i>Viajes</a></li>
+                            <li><a class="dropdown-item" href="{% url 'panel:cargas' %}"><i class="fas fa-boxes-stacked me-2 text-muted"></i>Cargas</a></li>
+                            {% endif %}
                             <li><a class="dropdown-item" href="{% url 'panel:seguimiento_gps' %}"><i class="fas fa-map-marked-alt me-2"></i>Seguimiento GPS</a></li>
                             <li><a class="dropdown-item" href="{% url 'panel:reportes' %}"><i class="fas fa-chart-bar me-2"></i>Reportes e historial</a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{% url 'panel:cargas' %}"><i class="fas fa-boxes-stacked me-2 text-muted"></i>Cargas</a></li>
+                            {% if user_data.rol_nombre == 'ADMINISTRADOR' %}
                             <li><a class="dropdown-item" href="{% url 'panel:tipos_carga' %}"><i class="fas fa-tags me-2 text-muted"></i>Tipos de carga</a></li>
+                            {% endif %}
                         </ul>
                     </li>
+                    {% endif %}
+                    {% if user_data.rol_nombre == 'ADMINISTRADOR' or user_data.rol_nombre == 'OPERADOR' %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle {% if request.resolver_match.url_name == 'unidades' or request.resolver_match.url_name == 'conductores' or request.resolver_match.url_name == 'clientes' %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="fas fa-address-book me-1"></i>Flota y clientes
                         </a>
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="{% url 'panel:unidades' %}"><i class="fas fa-truck me-2"></i>Unidades</a></li>
+                            {% if user_data.rol_nombre == 'ADMINISTRADOR' %}
                             <li><a class="dropdown-item" href="{% url 'panel:conductores' %}"><i class="fas fa-id-card me-2"></i>Conductores</a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{% url 'panel:clientes' %}"><i class="fas fa-building me-2"></i>Clientes</a></li>
+                            {% endif %}
                         </ul>
                     </li>
+                    {% endif %}
                     {% if user_data.rol_nombre == 'ADMINISTRADOR' %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle {% if request.resolver_match.url_name == 'usuarios' or request.resolver_match.url_name == 'roles' %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">

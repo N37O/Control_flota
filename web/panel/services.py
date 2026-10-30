@@ -12,7 +12,7 @@ class APIClient:
         refresh_token=None,
         on_token_refresh=None,
     ):
-        self.base_url = settings.API_BASE_URL
+        self.base_url = settings.API_BASE_URL.rstrip('/')
         self.token = token
         self.refresh_token = refresh_token
         self.on_token_refresh = on_token_refresh
@@ -126,6 +126,15 @@ class APIClient:
                 json={'usuario': usuario, 'password': password},
                 timeout=settings.API_TIMEOUT
             )
+            if response.status_code == 401:
+                try:
+                    data = response.json()
+                except ValueError:
+                    return None, 'Usuario o contraseña incorrectos.'
+                if isinstance(data, dict) and data.get('error'):
+                    return None, self._format_api_error(data['error'])
+                return None, 'Usuario o contraseña incorrectos.'
+
             data, error = self._handle_response(response)
             return data, error
         except requests.exceptions.ConnectionError:

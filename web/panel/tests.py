@@ -6,15 +6,33 @@ import requests
 
 from django.conf import settings
 from django.http import HttpResponse
-from django.test import RequestFactory, SimpleTestCase, TestCase
+from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 from django.urls import reverse
 
 from panel.services import APIClient
-from panel.views import dashboard_view, reportes_view, seguimiento_gps_view, viajes_view
+from panel.views import (
+    _configuracion_mapa, dashboard_view, reportes_view,
+    seguimiento_gps_view, viajes_view,
+)
 
 
 class PaginatedAPIClientTests(SimpleTestCase):
+    @override_settings(API_BASE_URL='https://api.example.test/api/')
+    def test_roles_endpoint_joins_base_path_without_duplicate_slash(self):
+        response = Mock(status_code=200)
+        response.json.return_value = {'results': []}
+        client = APIClient()
+
+        with patch.object(client.session, 'get', return_value=response) as get_mock:
+            data, error = client.get_roles()
+
+        self.assertIsNone(error)
+        self.assertEqual(data, {'results': []})
+        get_mock.assert_called_once_with(
+            'https://api.example.test/api/usuarios/roles/'
+        )
+
     def test_get_all_pages_combines_every_result_page(self):
         first_page = Mock(status_code=200)
         first_page.json.return_value = {
@@ -123,6 +141,28 @@ class DashboardViewTests(SimpleTestCase):
 
 
 class APIClientErrorTests(SimpleTestCase):
+    def test_login_shows_invalid_credentials_instead_of_expired_session(self):
+        response = Mock(status_code=401)
+        response.json.return_value = {'error': 'Credenciales incorrectas'}
+        client = APIClient()
+
+        with patch.object(client.session, 'post', return_value=response):
+            data, error = client.login('usuario', 'clave')
+
+        self.assertIsNone(data)
+        self.assertEqual(error, 'Credenciales incorrectas')
+
+    def test_login_uses_clear_fallback_for_invalid_json_unauthorized_response(self):
+        response = Mock(status_code=401)
+        response.json.side_effect = ValueError
+        client = APIClient()
+
+        with patch.object(client.session, 'post', return_value=response):
+            data, error = client.login('usuario', 'clave')
+
+        self.assertIsNone(data)
+        self.assertEqual(error, 'Usuario o contraseña incorrectos.')
+
     @patch('panel.services.requests.post')
     def test_refreshes_expired_access_token_and_retries_request(self, post_mock):
         refresh_response = requests.Response()
@@ -202,6 +242,45 @@ class APIClientErrorTests(SimpleTestCase):
 
         self.assertIsNone(data)
         self.assertEqual(error, 'El origen y el destino deben ser distintos.')
+
+
+class LoginViewTests(SimpleTestCase):
+    def test_login_preserves_password_whitespace(self):
+        with patch('panel.views.APIClient') as api_client_class, patch(
+            'panel.views.render',
+            return_value=HttpResponse(),
+        ):
+            api_client = api_client_class.return_value
+            api_client.login.return_value = (None, 'Credenciales incorrectas')
+
+            response = self.client.post(
+                reverse('panel:login'),
+                {'usuario': 'usuario-prueba', 'password': ' clave '},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        api_client.login.assert_called_once_with('usuario-prueba', ' clave ')
+
+
+class MapTileConfigurationTests(SimpleTestCase):
+    def test_maptiler_tiles_use_configured_api_key(self):
+        with override_settings(MAPTILER_API_KEY='sample_key-123'):
+            config = _configuracion_mapa()
+
+        self.assertEqual(
+            config['map_tile_url'],
+            'https://api.maptiler.com/maps/streets-v4/'
+            '{z}/{x}/{y}.png?key=sample_key-123',
+        )
+        self.assertEqual(config['map_provider_name'], 'MapTiler Streets')
+        self.assertEqual(config['map_tile_options']['tileSize'], 512)
+
+    def test_map_tiles_keep_esri_fallback_when_key_is_not_configured(self):
+        with override_settings(MAPTILER_API_KEY=''):
+            config = _configuracion_mapa()
+
+        self.assertIn('arcgisonline.com', config['map_tile_url'])
+        self.assertEqual(config['map_provider_name'], 'Esri World Street Map')
 
 
 class ViajesViewTests(SimpleTestCase):
@@ -315,6 +394,7 @@ class SeguimientoGPSViewTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         template_name, context = render_mock.call_args.args[1:3]
         self.assertEqual(template_name, 'panel/seguimiento_gps.html')
+        self.assertIn('arcgisonline.com', context['map_tile_url'])
         self.assertEqual(context['tracking_data']['viajes'][0]['origen'], [13.6929, -89.2182])
         self.assertEqual(context['tracking_data']['posiciones'][0]['id_viaje'], 12)
 
@@ -367,3 +447,27 @@ class ConductoresToggleTests(TestCase):
 
             self.assertEqual(response.status_code, 302)
             mock_client.toggle_conductor_activo.assert_called_once_with('7', False)
+
+
+class RoleAccessTests(TestCase):
+    def set_role(self, role_name):
+        session = self.client.session
+        session['access_token'] = 'role-test-token'
+        session['user_data'] = {'rol_nombre': role_name}
+        session.save()
+
+    def test_supervisor_cannot_open_administration_or_operational_pages(self):
+        self.set_role('SUPERVISOR')
+
+        self.assertEqual(self.client.get('/usuarios/').status_code, 403)
+        self.assertEqual(self.client.get('/viajes/').status_code, 403)
+        self.assertEqual(self.client.get('/control/').status_code, 403)
+        self.assertEqual(
+            self.client.post('/viajes/', {'action': 'create'}).status_code,
+            403,
+        )
+
+    def test_operator_cannot_open_role_management(self):
+        self.set_role('OPERADOR')
+
+        self.assertEqual(self.client.get('/roles/').status_code, 403)

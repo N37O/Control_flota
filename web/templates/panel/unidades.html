@@ -12,7 +12,7 @@
 </div>
 
 <div class="row g-4">
-    {% if is_admin %}
+    {% if can_operate %}
     <div class="col-md-4">
         <div class="card border-0 shadow-sm">
             <div class="card-header bg-white d-flex justify-content-between align-items-center">
@@ -29,6 +29,7 @@
                     <input type="hidden" name="action" id="formAction" value="create">
                     <input type="hidden" name="id_unidad" id="formId">
                     
+                    {% if is_admin %}
                     <!-- BUSCADOR DE PLACA -->
                     <div class="mb-3 p-2 rounded" style="background-color: #f8f9fa; border: 1px solid #dee2e6;">
                         <label class="form-label small fw-bold text-secondary mb-1">
@@ -50,6 +51,7 @@
                             {% endfor %}
                         </select>
                     </div>
+                    {% endif %}
                     
                     <div class="mb-2">
                         <label class="form-label small fw-bold">Placa</label>
@@ -129,7 +131,7 @@
     {% endif %}
 
     <!-- TABLA -->
-    <div class="{% if is_admin %}col-md-8{% else %}col-md-12{% endif %}">
+    <div class="{% if can_operate %}col-md-8{% else %}col-md-12{% endif %}">
         <div class="card border-0 shadow-sm">
             <div class="card-header bg-white d-flex justify-content-between align-items-center">
                 <h6 class="mb-0"><i class="fas fa-list me-2 text-primary"></i>Unidades Registradas</h6>

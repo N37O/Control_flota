@@ -1,11 +1,68 @@
 from decimal import Decimal, InvalidOperation
 from datetime import timedelta
+from functools import wraps
+from urllib.parse import quote
+from django.core.exceptions import PermissionDenied
 from django.shortcuts import render, redirect
 from django.conf import settings
 from django.contrib import messages
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from .services import APIClient
+
+
+def roles_required(*allowed_roles, write_roles=None):
+    def decorator(view):
+        @wraps(view)
+        def wrapped(request, *args, **kwargs):
+            role = request.user_data.get('rol_nombre', '').strip().upper()
+            if role not in allowed_roles:
+                raise PermissionDenied
+            if (
+                request.method not in ('GET', 'HEAD', 'OPTIONS')
+                and write_roles is not None
+                and role not in write_roles
+            ):
+                raise PermissionDenied
+            return view(request, *args, **kwargs)
+        return wrapped
+    return decorator
+
+
+def _configuracion_mapa():
+    api_key = getattr(settings, 'MAPTILER_API_KEY', '').strip()
+    if api_key:
+        return {
+            'map_tile_url': (
+                'https://api.maptiler.com/maps/streets-v4/'
+                '{z}/{x}/{y}.png?key=' + quote(api_key, safe='')
+            ),
+            'map_tile_attribution': (
+                '<a href="https://www.maptiler.com/copyright/" target="_blank" '
+                'rel="noopener">&copy; MapTiler</a> '
+                '<a href="https://www.openstreetmap.org/copyright" target="_blank" '
+                'rel="noopener">&copy; OpenStreetMap contributors</a>'
+            ),
+            'map_provider_name': 'MapTiler Streets',
+            'map_tile_options': {
+                'tileSize': 512,
+                'zoomOffset': -1,
+                'minZoom': 1,
+                'crossOrigin': True,
+            },
+        }
+
+    return {
+        'map_tile_url': (
+            'https://server.arcgisonline.com/ArcGIS/rest/services/'
+            'World_Street_Map/MapServer/tile/{z}/{y}/{x}'
+        ),
+        'map_tile_attribution': (
+            '&copy; Esri &middot; Datos &copy; OpenStreetMap contributors'
+        ),
+        'map_provider_name': 'Esri World Street Map',
+        'map_tile_options': {'maxZoom': 19},
+    }
 
 
 def login_view(request):
@@ -15,7 +72,7 @@ def login_view(request):
     
     if request.method == 'POST':
         usuario = request.POST.get('usuario', '').strip()
-        password = request.POST.get('password', '').strip()
+        password = request.POST.get('password', '')
         
         if not usuario or not password:
             messages.error(request, 'Por favor, completa todos los campos')
@@ -45,6 +102,7 @@ def logout_view(request):
     return redirect('panel:login')
 
 
+@roles_required('ADMINISTRADOR')
 def quitar_conductor_view(request):
     """Vista directa para quitar conductor de una unidad"""
     token = request.session.get('access_token')
@@ -64,6 +122,7 @@ def quitar_conductor_view(request):
     return redirect('panel:unidades')
 
 
+@roles_required('ADMINISTRADOR')
 def asignar_conductor_view(request):
     """Vista específica para asignar/desasignar conductor a unidad"""
     token = request.session.get('access_token')
@@ -113,6 +172,7 @@ def asignar_conductor_view(request):
     return redirect('panel:unidades')
 
 
+@roles_required('ADMINISTRADOR')
 def desasignar_conductor_view(request):
     """Vista simple para desasignar conductor de una unidad"""
     token = request.session.get('access_token')
@@ -138,6 +198,7 @@ def desasignar_conductor_view(request):
     return redirect('panel:unidades')
 
 
+@roles_required('ADMINISTRADOR', 'OPERADOR', 'SUPERVISOR')
 def dashboard_view(request):
     """Presenta un resumen operativo de la flota y sus viajes."""
     token = request.session.get('access_token')
@@ -309,6 +370,7 @@ def dashboard_view(request):
     return render(request, 'panel/dashboard.html', context)
 
 
+@roles_required('ADMINISTRADOR')
 def usuarios_view(request):
     """Vista de gestión de usuarios con CRUD completo"""
     token = request.session.get('access_token')
@@ -411,6 +473,7 @@ def usuarios_view(request):
     return render(request, 'panel/usuarios.html', context)
 
 
+@roles_required('ADMINISTRADOR')
 def roles_view(request):
     """Vista de gestión de roles con CRUD"""
     token = request.session.get('access_token')
@@ -470,13 +533,25 @@ def roles_view(request):
     return render(request, 'panel/roles.html', context)
 
 
+@roles_required(
+    'ADMINISTRADOR',
+    'OPERADOR',
+    write_roles=('ADMINISTRADOR', 'OPERADOR'),
+)
 def unidades_view(request):
     """Vista de unidades con asignación simplificada y desasignación correcta"""
     token = request.session.get('access_token')
     client = APIClient.from_request(request)
     user_data = request.user_data
     is_admin = user_data.get('rol_nombre') == 'ADMINISTRADOR'
-    context = {'user_data': user_data, 'is_admin': is_admin}
+    is_operator = user_data.get('rol_nombre') == 'OPERADOR'
+    can_operate = is_admin or is_operator
+    context = {
+        'user_data': user_data,
+        'is_admin': is_admin,
+        'is_operator': is_operator,
+        'can_operate': can_operate,
+    }
 
     # Cargar datos para el formulario
     tipos, _ = client.get_tipos_unidad()
@@ -514,8 +589,10 @@ def unidades_view(request):
         if u.get('id_conductor')
     }
 
-    if request.method == 'POST' and is_admin:
+    if request.method == 'POST' and can_operate:
         action = request.POST.get('action')
+        if is_operator and action != 'create':
+            raise PermissionDenied
         id_target = request.POST.get('id_unidad')
         
         # Función robusta para convertir a entero o None
@@ -599,6 +676,7 @@ def unidades_view(request):
     context['unidades'] = todas_unidades
     return render(request, 'panel/unidades.html', context)
 
+@roles_required('ADMINISTRADOR')
 def conductores_view(request):
     """Vista de gestión de conductores"""
     token = request.session.get('access_token')
@@ -667,6 +745,7 @@ def conductores_view(request):
     return render(request, 'panel/conductores.html', context)
 
 
+@roles_required('ADMINISTRADOR')
 def clientes_view(request):
     """Vista de gestión de clientes con tipo y documento"""
     token = request.session.get('access_token')
@@ -725,13 +804,26 @@ def clientes_view(request):
     return render(request, 'panel/clientes.html', context)
 
 
+@roles_required(
+    'ADMINISTRADOR',
+    'OPERADOR',
+    write_roles=('ADMINISTRADOR', 'OPERADOR'),
+)
 def viajes_view(request):
     """Vista de programación, edición, eliminación y consulta de viajes"""
     token = request.session.get('access_token')
     client = APIClient.from_request(request)
     user_data = request.user_data
     is_admin = user_data.get('rol_nombre') == 'ADMINISTRADOR'
-    context = {'user_data': user_data, 'is_admin': is_admin}
+    is_operator = user_data.get('rol_nombre') == 'OPERADOR'
+    can_operate = is_admin or is_operator
+    context = {
+        'user_data': user_data,
+        'is_admin': is_admin,
+        'is_operator': is_operator,
+        'can_operate': can_operate,
+    }
+    context.update(_configuracion_mapa())
 
     try:
         # Cargar datos para el formulario
@@ -779,8 +871,10 @@ def viajes_view(request):
         context['cargas_disponibles'] = []
         context['todas_cargas'] = []
 
-    if request.method == 'POST' and is_admin:
+    if request.method == 'POST' and can_operate:
         action = request.POST.get('action')
+        if is_operator and action != 'create':
+            raise PermissionDenied
         id_target = request.POST.get('id_viaje')
 
         def safe_int_or_none(value):
@@ -876,13 +970,25 @@ def viajes_view(request):
     return render(request, 'panel/viajes.html', context)
 
 
+@roles_required(
+    'ADMINISTRADOR',
+    'OPERADOR',
+    write_roles=('ADMINISTRADOR', 'OPERADOR'),
+)
 def cargas_view(request):
     """Vista de gestión de cargas (independiente de viajes)"""
     token = request.session.get('access_token')
     client = APIClient.from_request(request)
     user_data = request.user_data
     is_admin = user_data.get('rol_nombre') == 'ADMINISTRADOR'
-    context = {'user_data': user_data, 'is_admin': is_admin}
+    is_operator = user_data.get('rol_nombre') == 'OPERADOR'
+    can_operate = is_admin or is_operator
+    context = {
+        'user_data': user_data,
+        'is_admin': is_admin,
+        'is_operator': is_operator,
+        'can_operate': can_operate,
+    }
 
     # Cargar tipos de carga y clientes para los selectores
     tipos_carga, _ = client.get_tipos_carga()
@@ -891,8 +997,10 @@ def cargas_view(request):
     clientes, _ = client.get_clientes()
     context['clientes'] = clientes.get('results', []) if clientes else []
 
-    if request.method == 'POST' and is_admin:
+    if request.method == 'POST' and can_operate:
         action = request.POST.get('action')
+        if is_operator and action != 'create':
+            raise PermissionDenied
         id_target = request.POST.get('id_carga')
 
         def safe_int_or_none(value):
@@ -951,6 +1059,7 @@ def cargas_view(request):
     return render(request, 'panel/cargas.html', context)
 
 
+@roles_required('ADMINISTRADOR')
 def tipos_carga_view(request):
     """Vista de gestión de tipos de carga"""
     token = request.session.get('access_token')
@@ -998,15 +1107,27 @@ def tipos_carga_view(request):
     return render(request, 'panel/tipos_carga.html', context)
 
 
+@roles_required(
+    'ADMINISTRADOR',
+    'OPERADOR',
+    write_roles=('ADMINISTRADOR', 'OPERADOR'),
+)
 def control_view(request):
     """Vista de control de combustible y movimientos"""
     token = request.session.get('access_token')
     client = APIClient.from_request(request)
     user_data = request.user_data
     is_admin = user_data.get('rol_nombre') == 'ADMINISTRADOR'
-    context = {'user_data': user_data, 'is_admin': is_admin}
+    is_operator = user_data.get('rol_nombre') == 'OPERADOR'
+    can_operate = is_admin or is_operator
+    context = {
+        'user_data': user_data,
+        'is_admin': is_admin,
+        'is_operator': is_operator,
+        'can_operate': can_operate,
+    }
 
-    if request.method == 'POST' and is_admin:
+    if request.method == 'POST' and can_operate:
         action = request.POST.get('action')
         
         def safe_int_or_none(value):
@@ -1114,6 +1235,7 @@ def control_view(request):
     return render(request, 'panel/control.html', context)
 
 
+@roles_required('ADMINISTRADOR', 'OPERADOR', 'SUPERVISOR')
 def seguimiento_gps_view(request):
     """Mapa de rutas planeadas y últimas posiciones GPS recibidas."""
     client = APIClient.from_request(request)
@@ -1190,9 +1312,11 @@ def seguimiento_gps_view(request):
         'user_data': request.user_data,
         'tracking_data': {'viajes': datos_viajes, 'posiciones': datos_posiciones},
         'routing_api_url': getattr(settings, 'ROUTING_API_URL', 'https://router.project-osrm.org'),
+        **_configuracion_mapa(),
     })
 
 
+@roles_required('ADMINISTRADOR', 'OPERADOR', 'SUPERVISOR')
 def reportes_view(request):
     """Resumen de flota e historial consultable de viajes."""
     client = APIClient.from_request(request)

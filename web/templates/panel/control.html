@@ -26,7 +26,7 @@
     <!-- PESTAÑA COMBUSTIBLE -->
     <div class="tab-pane fade show active" id="combustible" role="tabpanel">
         <div class="row g-4">
-            {% if is_admin %}
+            {% if can_operate %}
             <div class="col-md-5">
                 <div class="card border-0 shadow-sm">
                     <div class="card-header bg-white">
@@ -116,7 +116,7 @@
             </div>
             {% endif %}
             
-            <div class="{% if is_admin %}col-md-7{% else %}col-md-12{% endif %}">
+            <div class="{% if can_operate %}col-md-7{% else %}col-md-12{% endif %}">
                 <div class="card border-0 shadow-sm">
                     <div class="card-header bg-white"><h6 class="mb-0"><i class="fas fa-history me-2 text-primary"></i>Compras de combustible registradas</h6></div>
                     <div class="card-body">
@@ -152,7 +152,7 @@
     <!-- PESTAÑA MOVIMIENTOS -->
     <div class="tab-pane fade" id="movimiento" role="tabpanel">
         <div class="row g-4">
-            {% if is_admin %}
+            {% if can_operate %}
             <div class="col-md-5">
                 <div class="card border-0 shadow-sm">
                     <div class="card-header bg-white">
@@ -237,7 +237,7 @@
             </div>
             {% endif %}
             
-            <div class="{% if is_admin %}col-md-7{% else %}col-md-12{% endif %}">
+            <div class="{% if can_operate %}col-md-7{% else %}col-md-12{% endif %}">
                 <div class="card border-0 shadow-sm">
                     <div class="card-header bg-white"><h6 class="mb-0"><i class="fas fa-history me-2 text-primary"></i>Salidas y llegadas registradas</h6></div>
                     <div class="card-body">

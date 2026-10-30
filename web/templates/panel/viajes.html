@@ -133,7 +133,7 @@
 </div>
 
 <div class="row g-4 viajes-layout">
-    {% if is_admin %}
+    {% if can_operate %}
     <!-- FORMULARIO -->
     <div class="col-md-5">
         <div class="card border-0 shadow-sm viaje-form-card">
@@ -330,7 +330,7 @@
     {% endif %}
 
     <!-- TABLA DE CONSULTA -->
-    <div class="{% if is_admin %}col-md-7{% else %}col-md-12{% endif %}">
+    <div class="{% if can_operate %}col-md-7{% else %}col-md-12{% endif %}">
         <div class="card border-0 shadow-sm viajes-table-card">
             <div class="card-header bg-white d-flex justify-content-between align-items-center">
                 <h6 class="mb-0"><i class="fas fa-list me-2 text-primary"></i>Viajes Programados</h6>
@@ -356,7 +356,7 @@
                                 <th>Rendimiento</th>
                                 <th>Costo</th>
                                 <th>Estado</th>
-                                <th class="viajes-actions">Acciones</th>
+                                {% if can_operate %}<th class="viajes-actions">Acciones</th>{% endif %}
                             </tr>
                         </thead>
                         <tbody>
@@ -431,37 +431,41 @@
                                         <span class="badge bg-secondary">-</span>
                                     {% endif %}
                                 </td>
-                                <td class="viajes-actions">
-                                    {% if is_admin %}
-                                        {% if v.id_estado_viaje == 1 %}
-                                            <div class="viajes-action-buttons">
-                                                <button class="btn btn-sm btn-info text-white btn-editar" title="Editar viaje">
-                                                    <i class="fas fa-edit me-1"></i>Editar
+                                {% if can_operate %}<td class="viajes-actions">
+                                    {% if v.id_estado_viaje == 1 %}
+                                        <div class="viajes-action-buttons">
+                                            {% if is_admin %}
+                                            <button class="btn btn-sm btn-info text-white btn-editar" title="Editar viaje">
+                                                <i class="fas fa-edit me-1"></i>Editar
+                                            </button>
+                                            {% endif %}
+                                            <a href="{% url 'panel:control' %}?viaje={{ v.id_viaje }}&amp;tipo=SALIDA" class="btn btn-sm btn-primary {% if v.total_cargas == 0 %}disabled{% endif %}" title="{% if v.total_cargas > 0 %}Registrar salida en Control{% else %}Asigna cargas antes de iniciar{% endif %}" {% if v.total_cargas == 0 %}aria-disabled="true"{% endif %}>
+                                                <i class="fas fa-play me-1"></i>Iniciar
+                                            </a>
+                                            {% if is_admin %}
+                                            <form method="POST" class="cancel-viaje-form">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="action" value="cancelar">
+                                                <input type="hidden" name="id_viaje" value="{{ v.id_viaje }}">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Cancelar viaje programado">
+                                                    <i class="fas fa-ban me-1"></i>Cancelar
                                                 </button>
-                                                <a href="{% url 'panel:control' %}?viaje={{ v.id_viaje }}&amp;tipo=SALIDA" class="btn btn-sm btn-primary {% if v.total_cargas == 0 %}disabled{% endif %}" title="{% if v.total_cargas > 0 %}Registrar salida en Control{% else %}Asigna cargas antes de iniciar{% endif %}" {% if v.total_cargas == 0 %}aria-disabled="true"{% endif %}>
-                                                    <i class="fas fa-play me-1"></i>Iniciar
-                                                </a>
-                                                <form method="POST" class="cancel-viaje-form">
-                                                    {% csrf_token %}
-                                                    <input type="hidden" name="action" value="cancelar">
-                                                    <input type="hidden" name="id_viaje" value="{{ v.id_viaje }}">
-                                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Cancelar viaje programado">
-                                                        <i class="fas fa-ban me-1"></i>Cancelar
-                                                    </button>
-                                                </form>
-                                            </div>
-                                        {% elif v.id_estado_viaje == 2 %}
+                                            </form>
+                                            {% endif %}
+                                        </div>
+                                    {% elif v.id_estado_viaje == 2 %}
+                                        {% if is_admin %}
                                             <button class="btn btn-sm btn-info text-white btn-editar" title="Editar viaje" disabled aria-disabled="true">
                                                 <i class="fas fa-edit me-1"></i>Editar
                                             </button>
-                                            <a href="{% url 'panel:control' %}?viaje={{ v.id_viaje }}&amp;tipo=ENTRADA" class="btn btn-sm btn-success" title="Registrar llegada en Control">
-                                                <i class="fas fa-check me-1"></i>Completar
-                                            </a>
-                                        {% elif v.id_estado_viaje == 3 %}
-                                            <span class="text-muted small">-</span>
                                         {% endif %}
+                                        <a href="{% url 'panel:control' %}?viaje={{ v.id_viaje }}&amp;tipo=ENTRADA" class="btn btn-sm btn-success" title="Registrar llegada en Control">
+                                            <i class="fas fa-check me-1"></i>Completar
+                                        </a>
+                                    {% elif v.id_estado_viaje == 3 %}
+                                        <span class="text-muted small">-</span>
                                     {% endif %}
-                                </td>
+                                </td>{% endif %}
                             </tr>
                             {% endif %}
                             {% empty %}
@@ -489,7 +493,7 @@
                 <div class="table-responsive">
                     <table class="table table-hover table-sm align-middle mb-0 viajes-table viajes-table-resumen">
                         <thead class="table-light">
-                            <tr><th>Correlativo</th><th>Ruta</th><th>Fecha Programada</th><th>Unidad</th><th>Conductor</th><th>Cliente</th><th>Km Recorridos</th><th>Combustible</th><th>Rendimiento</th><th>Costo</th>{% if is_admin %}<th>Acciones</th>{% endif %}</tr>
+                            <tr><th>Correlativo</th><th>Ruta</th><th>Fecha Programada</th><th>Unidad</th><th>Conductor</th><th>Cliente</th><th>Km Recorridos</th><th>Combustible</th><th>Rendimiento</th><th>Costo</th>{% if can_operate %}<th>Acciones</th>{% endif %}</tr>
                         </thead>
                         <tbody>
                             {% for v in viajes %}
@@ -505,7 +509,7 @@
                                     <td>{% if v.galones_consumidos %}<span class="badge bg-info">{{ v.galones_consumidos }} gal</span>{% else %}<small>-</small>{% endif %}</td>
                                     <td>{% if v.rendimiento_km_gal %}<small>{{ v.rendimiento_km_gal }} km/gal</small>{% else %}<small>-</small>{% endif %}</td>
                                     <td>{% if v.costo_combustible %}<strong>${{ v.costo_combustible }}</strong>{% else %}<small>-</small>{% endif %}</td>
-                                    {% if is_admin %}
+                                    {% if can_operate %}
                                     <td>
                                         <a href="{% url 'panel:control' %}?viaje={{ v.id_viaje }}&amp;tipo=ENTRADA" class="btn btn-sm btn-success" title="Registrar llegada en Control">
                                             <i class="fas fa-check me-1"></i>Completar
@@ -603,18 +607,22 @@
     {% endfor %}
 ]
 </script>
+{{ map_tile_options|json_script:"map-tile-options" }}
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script>
 const todasCargasData = JSON.parse(document.getElementById('todas-cargas-data').textContent || '[]');
 const unidadesData = JSON.parse(document.getElementById('unidades-data').textContent || '[]');
 const routingApiUrl = '{{ routing_api_url|escapejs }}'.replace(/\/$/, '');
+const mapTileUrl = '{{ map_tile_url|escapejs }}';
+const mapTileAttribution = '{{ map_tile_attribution|escapejs }}';
+const mapTileOptions = JSON.parse(document.getElementById('map-tile-options').textContent);
 const routeMapElement = document.getElementById('routePreviewMap');
 const routePreviewMap = window.L && routeMapElement ? L.map(routeMapElement).setView([13.7942, -88.8965], 8) : null;
 if (routePreviewMap) {
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
-        attribution: '&copy; Esri · Datos © OpenStreetMap contributors',
-        maxZoom: 19
+    L.tileLayer(mapTileUrl, {
+        attribution: mapTileAttribution,
+        ...mapTileOptions
     }).addTo(routePreviewMap);
 }
 const routePreviewLayer = routePreviewMap ? L.layerGroup().addTo(routePreviewMap) : null;
